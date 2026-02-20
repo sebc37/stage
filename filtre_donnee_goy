@@ -1,0 +1,8 @@
+import numpy as np
+
+PATH = r"./GOY-main/"
+path_data = PATH + "data.dat"
+
+X = np.loadtxt(path_data)
+
+print(np.shape(X))
