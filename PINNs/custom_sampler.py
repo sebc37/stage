@@ -20,7 +20,7 @@ class SamplerOverGrid(Sampler):
         for _ in range(self.__len__()):
             indice = torch.randint(0,self.Npts-self.m,(1,))
             nb_k = self.k_max_grid - self.k_min_grid
-            indices = torch.ones(nb_k*self.m,dtype=int)
+            indices = torch.ones(nb_k*self.m,dtype=torch.int32)
             #if self.k_min_grid == 0:
             for i in range(0,self.m):
                 indices[i] = indice + i + self.k_min_grid*self.Npts
@@ -32,6 +32,7 @@ class SamplerOverGrid(Sampler):
         #     for k in range(self.k_min_grid,self.k_max_grid):
         #         for i in range(0,self.m):        
         #             indices[i+ (k-self.k_min_grid)*self.m] = int(k*(self.Npts)) + indice.item() + i
+            print(f'sampler {indices}')
             yield indices.tolist()
                 
     def __len__(self):
