@@ -77,13 +77,14 @@ class boundary_variables_data(Dataset):
         self.nb_k = np.shape(X_boundary)[1]
         self.nb_t = np.shape(X_boundary)[0]
         self.tensor_data_bc = torch.ones((self.nb_k*self.nb_t,3), dtype=torch.float32) #columns: k, t, u
-        
+        #X_test = torch.tensor(X_boundary,dtype=torch.float32).T.contiguous().view(self.nb_k*self.nb_t,1)
         # trouver solution tq pour tout t, t!=0
         for k in range(self.nb_k*self.nb_t): # data ordered as (k,t,u) in the grid
             self.tensor_data_bc[k,0],self.tensor_data_bc[k,1],self.tensor_data_bc[k,2] = k//(self.nb_t),k%(self.nb_t),self.X_boundary[k%self.nb_t,k//self.nb_t]
         # for k in range(self.nb_k):
         #     print(self.tensor_data_bc[k*(self.nb_t-3):k*(self.nb_t+3)]) 
-       
+        #print(X_test)
+        
     def __len__(self):
         #return the lenght of the dataset
         return self.nb_k*self.nb_t
