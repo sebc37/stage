@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 class Train_PINN():
 
-    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=True,epoch=1000):
+    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=False,epoch=1000):
         self.learning_rate = learning_rate
         self.nbr_iteration = nbr_iteration
         self.w_1 = w_1
@@ -88,19 +88,43 @@ class Train_PINN():
                 loss_colocation_tracker[iteration] = loss_colocation.cpu().detach().numpy()
                 loss_boundary_conditions_tracker[iteration] = loss_boundary_conditions.cpu().detach().numpy()
                 loss_initial_conditions_tracker[iteration] = loss_initital_conditions.cpu().detach().numpy()
-            else:
+        else:
                 # regarder comment calculer les loss 
-                for epoch in range(0,epoch):
-                    for ic in enumerate(Dataloader_ic):
-                        loss_boundary_conditions
-                    for bc in enumerate(Dataloader_bc):
-                        loss_boundary_conditions
-                    for cl in enumerate(Dataloader_cl):
-                        loss_colocation
+                loss_func = torch.nn.MSELoss()
+                for ep in range(0,self.epoch):
+                    loss_boundary_conditions = 0
+                    loss_initital_conditions = 0
+                    loss_colocation = 0
+                    loss_physics = 0
+                    for idx,ic in enumerate(Dataloader_ic):
+                        # ic[0].to(device)
+                        # ic[1].to(device)
+                        ic_pred = torch.stack((ic[0],ic[1]))
+                        ic_pred.requires_grad_()
+                        u_pd_ini = model(ic_pred.T.to(device))
+                        u_exa_ini = ic[2].to(device)
+                        loss_initital_conditions = loss_initital_conditions + loss_func(u_pd_ini,u_exa_ini)
+                    
+                        
+                    for idx,bc in enumerate(Dataloader_bc):
+                        # bc[0].to(device)
+                        # bc[1].to(device)
+                        bc_pred = torch.stack((bc[0],bc[1]))
+                        u_pd_bc = model(bc_pred.T.to(device))
+                        u_exa_bc = bc[2].to(device)
+                        loss_boundary_conditions = loss_boundary_conditions +  loss_func(u_pd_bc,u_exa_bc)
+
+                    for idx,cl in enumerate(Dataloader_cl):
+                        cl_pred = torch.stack((cl[0],cl[1]))
+                        cl_pred.requires_grad_()
+                        u_pd_cl = model(cl_pred.T.to(device))
+                        u_exa_cl = cl[2].to(device)
+                        loss_colocation = loss_colocation +  loss_func(u_pd_cl,u_exa_cl)
+
                     for grid in enumerate(Dataloader_grid):
                         loss_physics
-            print(iteration)
-            print(total_loss)
+        print(iteration)
+        print(total_loss)
             
             
         return loss,loss_physics_tracker,loss_colocation_tracker,loss_boundary_conditions_tracker,loss_initial_conditions_tracker
@@ -282,9 +306,9 @@ Dataloader_grid = DataLoader(grid_dataset,batch_sampler=sampler_grid)
 
 
 
-boundary_train_dataset.tensor_data_bc.to(device)
-colocation_dataset.tensor_data_colocation.to(device)
-grid_dataset.grille.to(device)
+# boundary_train_dataset.tensor_data_bc.to(device)
+# colocation_dataset.tensor_data_colocation.to(device)
+# grid_dataset.grille.to(device)
 
 
 
