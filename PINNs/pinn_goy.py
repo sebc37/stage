@@ -284,25 +284,30 @@ def test_loss(Data_train,grille_datatset):
     grille = [t for t in range(Npts)]
     #u = torch.tensor(Data_train[:,k_min:2*k_max],requires_grad=True) #tensor des U(k,t)  #view(Npts,k_max-k_min)
     #tensor_split = torch.split(tensor_data,k_max-k_min,1)
-    u_t = np.copy(Data_train[:,k_min_collocation:k_max])
-    for k in range(k_min_collocation,k_max):
+    u_t = np.copy(Data_train[:,2*k_min_collocation:2*k_max-2])
+    for k in range(2*k_min_collocation,2*k_max-2):
         for t in range(0,Npts):
             #u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]*np.exp(nu*K[k]*dt)-data[t,k-k_min_collocation])/dt
             if t!=0 and t!=Npts-1:
-                u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]-data[t-1,k-k_min_collocation])/(2*(dt*f))
+                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(2*(10*dt*f))
             if t==0:
-                u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]-data[t,k-k_min_collocation])/(dt*f)
+                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t,k-2*k_min_collocation])/(10*dt*f)
             if t==Npts-1:
-                u_t[t,k-k_min_collocation] = (data[t,k-k_min_collocation]-data[t-1,k-k_min_collocation])/(dt*f)
+                u_t[t,k-2*k_min_collocation] = (data[t,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(10*dt*f)
 
+    u_t_real = u_t[:,::2]
+    u_t_im = u_t[:,1::2]
 
-    u_t = torch.tensor(u_t)
-    GOY_physics_real = torch.zeros(Npts,(k_max - k_min_collocation))
-    GOY_physics_im = torch.zeros(Npts,(k_max - k_min_collocation))
+    u_t_im = torch.tensor(u_t_im)
+    u_t_real = torch.tensor(u_t_real)
+
+    GOY_physics_real = torch.zeros(Npts,(k_max-2 - k_min_collocation))
+    GOY_physics_im = torch.zeros(Npts,(k_max-2 - k_min_collocation))
+
     
     for i in range (k_min_collocation,k_max-2):
             j= i-k_min_collocation
-            GOY_physics_real[:,j] = u_t[:,j] 
+            GOY_physics_real[:,j] = u_t_real[:,j] 
 
             -K[i]*(data_real[:,j+1]*data_im[:,j+2] + data_im[:,j+1]*data_real[:,j+2]) 
 
@@ -312,7 +317,7 @@ def test_loss(Data_train,grille_datatset):
 
             + nu*K[i]*K[i]*data_real[:,j] #deltat =1
 
-            GOY_physics_im[:,j] = u_t[:,j] 
+            GOY_physics_im[:,j] = u_t_im[:,j] 
 
             -K[i]*(data_real[:,j+1]*data_real[:,j+2] - data_im[:,j+1]*data_im[:,j+2]) 
 
@@ -351,7 +356,7 @@ print(f'cuda is available : {command}')
 PATH =r"./GOY-main/" # r"/home/s26calme/Documents/code_stage/Donnees/GOY_modele/Parametre_Ewen/"
 path_data = PATH + "data.dat"
 
-data =  np.loadtxt(path_data) # charge le jeu de données
+data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
 debut = int(0.1*Nmax) # skip la phase de stabilisation
 
@@ -388,8 +393,10 @@ eps =  0.5     # for the NL coefficients
 nu = 1.e-7     # vicosité
 nb_shell = 22 
 dt = 1.0e-5
-time = 1000
 f=100 # sauvegarde tous les f points
+time = 1000
+Steps = time/dt # nombre de pas
+N_fs = int(1/((f-0.1)*dt)) # enregistrement tous les N_fs pas 
 ############ parameters for the PINN ############
 
 
@@ -413,7 +420,7 @@ model.to(device)
 
 nbr_initial_t = 1     # Only t=0 for defining the initial condition
 t_min = 0    # t initial pour la grille          
-t_max = Npts # tmax pour la grille 
+t_max = 1000 # tmax pour la grille 
 
 
 ############# initialization of dataset for training #################
@@ -424,7 +431,7 @@ t_max = Npts # tmax pour la grille
 initial_train_dataset = initials_variables_data(Data_ic,nbr_initial_t,k_min,k_max)
 boundary_train_dataset = boundary_variables_data(X_boundary=Data_bc,Npts=Npts,time=time,f=f,dt=dt)
 colocation_dataset = colocations_variables_data(Data_train)
-grid_dataset = grid_data(k_min,k_max,t_min,t_max)
+grid_dataset = grid_data(k_min,k_max,t_min,t_max,Npts=Npts)
 
 
 batch_size_bc = int(0.01*Npts)
