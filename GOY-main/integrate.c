@@ -27,6 +27,7 @@ int N_steps;
 int N_fs=(int)(1./dt/fs);
 
 
+
 void init_NL()
 {   int i;
 

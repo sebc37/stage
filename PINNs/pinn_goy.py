@@ -104,8 +104,8 @@ class Train_PINN():
                         ic_pred.requires_grad_()
                         u_pd_ini = model(ic_pred)
                         u_exa_ini = ic[2].to(device)
-                        loss_initital_conditions = loss_initital_conditions + loss_func(u_pd_ini,u_exa_ini)
-                    
+                        loss_initital_conditions = loss_initital_conditions + self.w_1*loss_func(u_pd_ini,u_exa_ini)
+
                         
                     for idx,bc in enumerate(Dataloader_bc):
                         # bc[0].to(device)
@@ -113,14 +113,14 @@ class Train_PINN():
                         bc_pred = torch.stack((bc[0],bc[1])).T.to(device)
                         u_pd_bc = model(bc_pred)
                         u_exa_bc = bc[2].to(device)
-                        loss_boundary_conditions = loss_boundary_conditions +  loss_func(u_pd_bc,u_exa_bc)
+                        loss_boundary_conditions = loss_boundary_conditions +  self.w_2*loss_func(u_pd_bc,u_exa_bc)
 
                     for idx,cl in enumerate(Dataloader_cl):
                         cl_pred = torch.stack((cl[0],cl[1])).T.to(device)
                         cl_pred.requires_grad_()
                         u_pd_cl = model(cl_pred)
                         u_exa_cl = cl[2].to(device)
-                        loss_colocation = loss_colocation +  loss_func(u_pd_cl,u_exa_cl)
+                        loss_colocation = loss_colocation +  self.w_3*loss_func(u_pd_cl,u_exa_cl)
 
                     for idx,grid in enumerate(Dataloader_grid):
                         grid_pred = torch.stack((grid[0],grid[1])).T.to(device)
@@ -139,7 +139,7 @@ class Train_PINN():
                         for i in range(k_min_phy,k_max_phy-2):
                              GOY_physics[:,i-k_min_phy] = du_dt[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i]
                             
-                        loss_physics = loss_physics + torch.mean(GOY_physics**2)
+                        loss_physics = loss_physics + self.w_4*torch.mean(GOY_physics**2)
         print(iteration)
         print(total_loss)
             
@@ -190,33 +190,151 @@ def reduced_center(X,mean,std):
         X[:,k]= (X[:,k]-mean[k])/std[k]
     return X
 
+def dudt(U, t, n, K, eps, lmb, nu):
+    """Time derivative for shell *n* in the GOY model.
+
+    Parameters
+    ----------
+    U : array_like
+        Current state vector for all shells.
+    t : float
+        Current time (unused in autonomous GOY, kept for API compatibility).
+    n : int
+        Index of the shell for which the derivative is requested.
+    K : sequence
+        Coefficients for each shell.
+    eps : float
+        Non‑linear coefficient in the GOY model.
+    lmb : float
+        Scale ratio between consecutive shells.
+    nu : float
+        Viscosity coefficient.
+
+    Returns
+    -------
+    float
+        Time derivative \(\dot U_n\).
+    """
+    return (
+        K[n] *
+        (U[n+1] * U[n+2]
+         - (eps / lmb) * U[n-1] * U[n+1]
+         + ((eps - 1) / lmb**2) * U[n-2] * U[n-1])
+        - nu * (K[n]**2) * U[n]
+    )
+
+
+def RK4(U0, t0, n, t, dt, K, eps, lmb, nu):
+    """Integrate the GOY shell system using classical RK4.
+
+    The method advances the state from time ``t0`` to ``t`` with a fixed
+    step ``dt``.  ``U0`` should be a one‑dimensional array of length ``n``
+    containing the initial values for all shells.  Only shells with indices
+    ``2 <= j < n-2`` are updated (consistent with the original implementation).
+
+    Returns an array of shape ``(Nstep, len(U0))`` containing the state at
+    each timestep (the initial state is _not_ included).
+    """
+    Nstep = int((t - t0) / dt)
+    Un = U0.copy()
+    U = np.zeros((Nstep, len(U0)))
+
+    for i in range(Nstep):
+        # allocate stage derivatives
+        k1 = np.zeros_like(Un)
+        k2 = np.zeros_like(Un)
+        k3 = np.zeros_like(Un)
+        k4 = np.zeros_like(Un)
+
+        # compute k1 through k4 for each shell independently
+        for j in range(2, n - 2):
+            k1[j-2] = dudt(Un, t0, j, K, eps, lmb, nu)
+        k1 *= dt
+
+        for j in range(2, n - 2):
+            k2[j-2] = dudt(Un + 0.5 * k1, t0 + 0.5 * dt, j, K, eps, lmb, nu)
+        k2 *= dt
+
+        for j in range(2, n - 2):
+            k3[j-2] = dudt(Un + 0.5 * k2, t0 + 0.5 * dt, j, K, eps, lmb, nu)
+        k3 *= dt
+
+        for j in range(2, n - 2):
+            k4[j-2] = dudt(Un + k3, t0 + dt, j, K, eps, lmb, nu)
+        k4 *= dt
+
+        Un = Un + (1.0 / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        t0 += dt
+
+        U[i] = Un
+        
+    return U
+        
+
+
+
+
 def test_loss(Data_train,grille_datatset):
 
     # grid_train_data = grille_datatset.grille # donne la grille des (k,t)
     # grid_train_data.requires_grad = True # permet d'appliqué grad
-    data = Data_train[:,k_min_collocation:k_max]
+    data = Data_train[:,2*k_min_collocation:2*k_max]
+    data_real = data[:,::2]
+    data_im = data[:,1::2]
     grille = [t for t in range(Npts)]
-    u = torch.tensor(Data_train[:,k_min:k_max],requires_grad=True) #tensor des U(k,t)  #view(Npts,k_max-k_min)
+    #u = torch.tensor(Data_train[:,k_min:2*k_max],requires_grad=True) #tensor des U(k,t)  #view(Npts,k_max-k_min)
     #tensor_split = torch.split(tensor_data,k_max-k_min,1)
     u_t = np.copy(Data_train[:,k_min_collocation:k_max])
     for k in range(k_min_collocation,k_max):
-        for t in range(0,Npts-1):
-            u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]*np.exp(nu*K[k]*dt)-data[t,k-k_min_collocation])/dt
+        for t in range(0,Npts):
+            #u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]*np.exp(nu*K[k]*dt)-data[t,k-k_min_collocation])/dt
+            if t!=0 and t!=Npts-1:
+                u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]-data[t-1,k-k_min_collocation])/(2*(dt*f))
+            if t==0:
+                u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]-data[t,k-k_min_collocation])/(dt*f)
+            if t==Npts-1:
+                u_t[t,k-k_min_collocation] = (data[t,k-k_min_collocation]-data[t-1,k-k_min_collocation])/(dt*f)
 
 
     u_t = torch.tensor(u_t)
-    GOY_physics = torch.zeros(Npts,(k_max - k_min_collocation))
- 
+    GOY_physics_real = torch.zeros(Npts,(k_max - k_min_collocation))
+    GOY_physics_im = torch.zeros(Npts,(k_max - k_min_collocation))
     
     for i in range (k_min_collocation,k_max-2):
-            GOY_physics[:,i-k_min_collocation] = u_t[:,i-k_min_collocation] -K[i]*u[:,i+1]*u[:,i+2] +K[i]*eps/lmb*u[:,i-1]*u[:,i+1] - K[i]*((eps-1)/lmb**2)*u[:,i-2]*u[:,i-1] + nu*K[i]*K[i]*u[:,i] #deltat =1
+            j= i-k_min_collocation
+            GOY_physics_real[:,j] = u_t[:,j] 
+
+            -K[i]*(data_real[:,j+1]*data_im[:,j+2] + data_im[:,j+1]*data_real[:,j+2]) 
+
+            +K[i]*(eps/lmb)*(data_real[:,j-1]*data_im[:,j+1]+data_im[:,j-1]*data_real[:,j+1]) 
+            
+            - K[i]*((eps-1)/lmb**2)*(data_real[:,j-2]*data_im[:,j-1] + data_im[:,j-2]*data_real[:,j-1]) 
+
+            + nu*K[i]*K[i]*data_real[:,j] #deltat =1
+
+            GOY_physics_im[:,j] = u_t[:,j] 
+
+            -K[i]*(data_real[:,j+1]*data_real[:,j+2] - data_im[:,j+1]*data_im[:,j+2]) 
+
+            +K[i]*(eps/lmb)*(data_real[:,j-1]*data_real[:,j+1] - data_im[:,j-1]*data_im[:,j+1]) 
+            
+            - K[i]*((eps-1)/lmb**2)*(data_real[:,j-2]*data_real[:,j-1] - data_im[:,j-2]*data_im[:,j-1]) 
+
+            + nu*K[i]*K[i]*data_im[:,j]
             plt.figure()
-            plt.plot(grille,GOY_physics[:,i-k_min_collocation].detach().numpy(),label=f'Loss shell{i-k_min_collocation}')
+            plt.plot(grille,GOY_physics_real[:,j].detach().numpy(),label=f'Loss shell{i}')
             plt.legend()
-            plt.savefig(PATH + f"loss_shell_{i-k_min_collocation}")
-    print(torch.max(GOY_physics),torch.min(GOY_physics),torch.std_mean(GOY_physics))
-    loss_physics = torch.mean(GOY_physics**2)
-    return loss_physics,GOY_physics
+            plt.savefig(PATH + f"loss_shell_real{i}")
+
+            plt.figure()
+            plt.plot(grille,GOY_physics_im[:,j].detach().numpy(),label=f'Loss shell{i}')
+            plt.legend()
+            plt.savefig(PATH + f"loss_shell_im{i}")
+
+    print(torch.max(GOY_physics_real),torch.min(GOY_physics_real),torch.std_mean(GOY_physics_real))
+    print(torch.max(GOY_physics_im),torch.min(GOY_physics_im),torch.std_mean(GOY_physics_im))
+    loss_physics = (torch.mean(GOY_physics_im**2) +torch.mean(GOY_physics_real**2))/2
+    return loss_physics,GOY_physics_real,GOY_physics_im
 
 #########################################################################
 #               Paramètres Pinn et entrainement                         #
@@ -230,24 +348,33 @@ command = torch.cuda.is_available()
 print(f'cuda is available : {command}')
 
 ######### The data generated by the shell model #######
-PATH =r"./GOY-main/"# r"/home/s26calme/Documents/code_stage/Donnees/GOY_modele/Parametre_Ewen/"
+PATH =r"./GOY-main/" # r"/home/s26calme/Documents/code_stage/Donnees/GOY_modele/Parametre_Ewen/"
 path_data = PATH + "data.dat"
 
 data =  np.loadtxt(path_data) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
 debut = int(0.1*Nmax) # skip la phase de stabilisation
 
-Data_shell = data[debut:Nmax,::2] # on garde que la partie réelle de chaque shell
+Data_shell = data[debut:Nmax,:] # on garde que la partie réelle de chaque shell
 Npts = np.shape(Data_shell)[0] # nombre de pas dans le temps
+
+# nb of shells selected for training the PINN on collocatin point
+k_min_collocation = 4 
+k_max_collocation = 10 
+
+#nb of shells for training on boundary conditions
+k_bc_min = 0
+k_bc_max = 4 
+
 
 
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
-Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, = filter_mode(Data_shell,4,10,0,0.001,123456)
+Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
 
 
 Data_shell = reduced_center(Data_shell,mean,Std_mode) # centré réduit tous les modes 
 Data_ic = Data_shell[0,:] # prends tous le spoints en t=0
-Data_bc = Data_shell[:,0:4] # prends tous les points de bords (shell allant de 0->3 avec 3 shell de forçage)
+Data_bc = Data_shell[:,k_bc_min:2*k_bc_max] # prends tous les points de bords (shell allant de 0->3 avec 3 shell de forçage)
 
 print("Moyenne de l'ensemble des mode",np.mean(Data_shell))
 print("std de tous les modes ", np.std(Data_shell))
@@ -260,16 +387,12 @@ lmb = 2.0     #ratio between consecutive scales
 eps =  0.5     # for the NL coefficients
 nu = 1.e-7     # vicosité
 nb_shell = 22 
-dt = 1
+dt = 1.0e-5
+time = 1000
+f=100 # sauvegarde tous les f points
 ############ parameters for the PINN ############
 
-# nb of shells selected for training the PINN on collocatin point
-k_min_collocation = 4 
-k_max_collocation = 10 
 
-#nb of shells for training on boundary conditions
-k_bc_min = 0
-k_bc_max = 4 
 
 # k_min et k_max sur l'ensemble des shells à reconstituter 
 k_min = min(k_min_collocation,k_bc_min)
@@ -299,7 +422,7 @@ t_max = Npts # tmax pour la grille
 
 
 initial_train_dataset = initials_variables_data(Data_ic,nbr_initial_t,k_min,k_max)
-boundary_train_dataset = boundary_variables_data(X_boundary=Data_bc,Npts=Npts)
+boundary_train_dataset = boundary_variables_data(X_boundary=Data_bc,Npts=Npts,time=time,f=f,dt=dt)
 colocation_dataset = colocations_variables_data(Data_train)
 grid_dataset = grid_data(k_min,k_max,t_min,t_max)
 
@@ -327,9 +450,12 @@ Dataloader_grid = DataLoader(grid_dataset,batch_sampler=sampler_grid)
 # colocation_dataset.tensor_data_colocation.to(device)
 # grid_dataset.grille.to(device)
 
+# quick integration check using the RK4 helper
+#solution = RK4(Data_shell[0,2:10], 0, 8, 1, dt=1.0e-5, K=K, eps=eps, lmb=lmb, nu=nu)
+#print(solution[-1,])
+#print("RK4 returned array of shape", solution.shape)
 
-
-#test_loss(Data_train=Data_shell,grille_datatset=grid_dataset)
+test_loss(Data_train=Data_shell,grille_datatset=grid_dataset)
 
 
 

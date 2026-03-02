@@ -26,7 +26,7 @@ int main()
     {   integrate();
         if (DO_FLUX) compute_flux();
     
-        if ((count%1)==0) //N_fs
+        if ((count%N_fs)==0) //N_fs
         {   if (X[0]==X[0]){printf("remaining steps: %d\n", (int)(count/N_fs));}
         	    else{printf("remaining steps: %d : ERROR\n", (int)(count/N_fs));}
             if (DO_FIR)
