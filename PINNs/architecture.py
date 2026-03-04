@@ -58,7 +58,7 @@ class initials_variables_data(Dataset):
         self.tensor_data = torch.ones((np.shape(self.x_initial)[0]*np.shape(self.t_initial)[0],3), dtype=torch.float32)
         self.tensor_data[:,0:2] = self.grille
         self.tensor_data[:,2] = self.tensor_data_ic
-        print(f'shape tensor for initial conditions : {self.tensor_data.shape}')
+        #print(f'shape tensor for initial conditions : {self.tensor_data.shape}')
     
     def __len__(self):
         #return the lenght of the dataset
@@ -116,7 +116,7 @@ class colocations_variables_data(Dataset):
         self.nb_colocation_pnt = len(self.X_Data_train[1])
         #colocation points aranged as (k,t,u) in the grid
         self.tensor_data_colocation = torch.tensor(self.X_Data_train, dtype=torch.float32).T.view(self.nb_colocation_pnt,3)
-        print(f'shape of tensor for collocation points :  {self.tensor_data_colocation.shape}')
+        #print(f'shape of tensor for collocation points :  {self.tensor_data_colocation.shape}')
 
 
     def __len__(self):
@@ -158,12 +158,12 @@ class grid_data(Dataset): # créer la grille sur laquelle on veut inferer U(k,t)
         #######################################################################
         self.N_k = np.shape(self.x)[0] 
         self.N_t = np.shape(self.t)[0]
-        print(f'shape tensor of the grid : {self.grid.shape}')
+        #print(f'shape tensor of the grid : {self.grid.shape}')
 
     def __len__(self):
         #return the lenght of the dataset
         return self.N_t*self.N_k
 
     def __getitem__(self,idx):
-        print(f'idx {idx}')
+        #print(f'idx {idx}')
         return self.grid[idx,0],self.grid[idx,1],idx  # This class only returns the x and t values of the grid not the velocity

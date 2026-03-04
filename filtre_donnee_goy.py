@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-PATH = r"./GOY-main/"
+PATH = r"./Donnees/"
 path_data = PATH + "data.dat"
 
 data = np.loadtxt(path_data)
@@ -14,15 +14,15 @@ def time_series(X,X_f,Std_mode,perc,mean):
     time = np.linspace(0,np.shape(X)[0],np.shape(X)[0])
     plt.figure(1)
 
-    plt.plot(time,(X[:,4]-mean[4])/Std_mode[4], 'black',label='Mode 4 Forcing',alpha=1)
-    plt.plot(time,(X[:,6]- mean[6])/Std_mode[6], 'gray',label='Mode 6',alpha=0.5)
-    plt.plot(time,(X[:,8]-mean[8])/Std_mode[8], 'gray',label='Mode 8',alpha=0.5)
-    plt.plot(time,(X[:,10]-mean[10])/Std_mode[10], 'gray',label='Mode 10',alpha=0.5)
+    plt.plot(time,(X[:,3]-mean[3])/Std_mode[3], 'black',label='Mode 4 Forcing',alpha=1)
+    plt.plot(time,(X[:,5]- mean[5])/Std_mode[5], 'gray',label='Mode 6',alpha=0.5)
+    plt.plot(time,(X[:,7]-mean[7])/Std_mode[7], 'gray',label='Mode 8',alpha=0.5)
+    plt.plot(time,(X[:,9]-mean[9])/Std_mode[9], 'gray',label='Mode 10',alpha=0.5)
     #plt.plot(time,X[:,21]/Std_mode[21], 'b',label='Mode 21',alpha=1)
    
-    plt.plot(time,(X_f[:,6]-mean[6])/Std_mode[6], '+',label='Mode 6 filtered')
-    plt.plot(time,(X_f[:,8]-mean[8])/Std_mode[8], '+',label='Mode 8 filtered')
-    plt.plot(time,(X_f[:,10]-mean[10])/Std_mode[10], '+',label='Mode 10 filtered')
+    plt.plot(time,(X_f[:,5]-mean[5])/Std_mode[5], '+',label='Mode 6 filtered')
+    plt.plot(time,(X_f[:,7]-mean[7])/Std_mode[7], '+',label='Mode 8 filtered')
+    plt.plot(time,(X_f[:,9]-mean[9])/Std_mode[9], '+',label='Mode 10 filtered')
     plt.xlabel('Time')
     plt.ylabel('Velocities')
     plt.legend(title=f'Percentage filtered: {100-perc:.2f}%')

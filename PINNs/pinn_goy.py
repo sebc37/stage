@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 class Train_PINN():
 
-    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=False,epoch=1000):
+    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=True,epoch=1000):
         self.learning_rate = learning_rate
         self.nbr_iteration = nbr_iteration
         self.w_1 = w_1
@@ -55,11 +55,11 @@ class Train_PINN():
                 u_pd_colocation = model(colocation_train_data[:,0:2]).to(device)
                 loss_colocation = self.w_3*torch.mean((u_pd_colocation-colocation_train_data[:,2])**2).to(device)
 
-                grid_train_data = grid_dataset.grille.requires_grad_(True).to(device)
+                grid_train_data = grid_dataset.grid.requires_grad_(True).to(device)
                 u_pd = model(grid_train_data).to(device)
                 #a = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)
                 u_t = torch.autograd.grad(u_pd, grid_train_data, torch.ones_like(u_pd), create_graph=True)[0][:,1:2].to(device)
-        
+
                 # u_x = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
                 # u_xx = torch.autograd.grad(u_x, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
                 
@@ -73,12 +73,29 @@ class Train_PINN():
                 # u_pd = torch.cat(tuple_u_pd,1).to(device)         
                 u_pd = u_pd.view(k_max-k_min,Npts).T
                 u_t = u_t.view(k_max-k_min,Npts).T
+                u_pd_im = u_pd[:,1::2]
+                u_pd_real = u_pd[:,::2]
+                u_t_im = u_t[:,1::2]
+                u_t_real = u_t[:,::2]
                 # on veut calculer la loss physique sur le shells où il y a des collocations points
-                GOY_physics = torch.zeros(Npts,(k_max-2 - k_min_collocation)).to(device)
+                GOY_physics_im = torch.zeros(Npts,(k_max-2 - k_min_collocation)).to(device)
+                GOY_physics_real = torch.zeros(Npts,(k_max-2 - k_min_collocation)).to(device)
                 #print(GOY_physics.shape)
                 for i in range (k_min_collocation,k_max-2):
-                    GOY_physics[:,i-k_min_collocation] = u_t[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i] # à confirmer
-                loss_physics = self.w_4*torch.mean(GOY_physics**2).to(device)
+                    GOY_physics_im[:,i-k_min_collocation] = u_t_im[:,i] 
+                    - K[i]*(u_pd_real[:,i+1]*u_pd_real[:,i+2] - u_pd_im[:,i+2]*u_pd_im[:,i+1])
+                    -(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_real[:,i+1] - u_pd_im[:,i-1]*u_pd_im[:,i+1])
+                    -((eps-1)/(lmb**2))*K[i]*(u_pd_real[:,i-2]*u_pd_real[:,i-1] - u_pd_im[:,i-2]*u_pd_im[:,i-1])
+                    -nu*(K[i]**2)*u_pd_im[:,i]
+
+                    GOY_physics_real[:,i-k_min_collocation] = u_t_real[:,i] 
+                    - K[i]*(u_pd_real[:,i+1]*u_pd_im[:,i+2] - u_pd_real[:,i+2]*u_pd_im[:,i+1])
+                    -(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_im[:,i+1] - u_pd_im[:,i-1]*u_pd_real[:,i+1])
+                    -((eps-1)/(lmb**2))*K[i]*(u_pd_real[:,i-2]*u_pd_im[:,i-1] - u_pd_im[:,i-2]*u_pd_real[:,i-1])
+                    -nu*(K[i]**2)*u_pd_real[:,i]
+                    
+                    #u_t[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i] # à confirmer
+                loss_physics = self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device)
 
                 #Total Loss
                 total_loss = loss_initital_conditions + loss_boundary_conditions + loss_physics + loss_colocation
@@ -289,11 +306,11 @@ def test_loss(Data_train,grille_datatset):
         for t in range(0,Npts):
             #u_t[t,k-k_min_collocation] = (data[t+1,k-k_min_collocation]*np.exp(nu*K[k]*dt)-data[t,k-k_min_collocation])/dt
             if t!=0 and t!=Npts-1:
-                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(2*(dt*f))
+                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(2*(dt))
             if t==0:
-                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t,k-2*k_min_collocation])/(dt*f)
+                u_t[t,k-2*k_min_collocation] = (data[t+1,k-2*k_min_collocation]-data[t,k-2*k_min_collocation])/(dt)
             if t==Npts-1:
-                u_t[t,k-2*k_min_collocation] = (data[t,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(dt*f)
+                u_t[t,k-2*k_min_collocation] = (data[t,k-2*k_min_collocation]-data[t-1,k-2*k_min_collocation])/(dt)
 
     u_t_real = u_t[:,::2]
     u_t_im = u_t[:,1::2]
@@ -329,17 +346,17 @@ def test_loss(Data_train,grille_datatset):
 
             + nu*K[i]*K[i]*data_im[:,j]
             plt.figure()
-            plt.plot(grille,GOY_physics_real[:,j].detach().numpy(),label=f'Loss shell{i}')
+            plt.plot(grille,GOY_physics_real[:,j].detach().numpy()**2,label=f'Loss shell{i}')
             plt.legend()
             plt.savefig(PATH + f"loss_shell_real{i}")
 
             plt.figure()
-            plt.plot(grille,GOY_physics_im[:,j].detach().numpy(),label=f'Loss shell{i}')
+            plt.plot(grille,GOY_physics_im[:,j].detach().numpy()**2,label=f'Loss shell{i}')
             plt.legend()
             plt.savefig(PATH + f"loss_shell_im{i}")
 
-    print(torch.max(GOY_physics_real),torch.min(GOY_physics_real),torch.std_mean(GOY_physics_real))
-    print(torch.max(GOY_physics_im),torch.min(GOY_physics_im),torch.std_mean(GOY_physics_im))
+    print(torch.max(GOY_physics_real**2),torch.min(GOY_physics_real**2),torch.std_mean(GOY_physics_real**2))
+    print(torch.max(GOY_physics_im**2),torch.min(GOY_physics_im**2),torch.std_mean(GOY_physics_im**2))
     loss_physics = (torch.mean(GOY_physics_im**2) +torch.mean(GOY_physics_real**2))/2
     return loss_physics,GOY_physics_real,GOY_physics_im
 
@@ -355,8 +372,8 @@ command = torch.cuda.is_available()
 print(f'cuda is available : {command}')
 
 ######### The data generated by the shell model #######
-PATH =r"./GOY-main/tmp/" # r"/home/s26calme/Documents/code_stage/Donnees/GOY_modele/Parametre_Ewen/"
-path_data = PATH + "data_10.dat"
+PATH =r"/home/s26calme/Documents/code_stage/GOY-main/tmp/" # r"/home/s26calme/Documents/code_stage/Donnees/GOY_modele/Parametre_Ewen/"
+path_data = PATH + "data.dat"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
@@ -394,9 +411,9 @@ lmb = 2.0     #ratio between consecutive scales
 eps =  0.5     # for the NL coefficients
 nu = 1.e-7     # vicosité
 nb_shell = 22 
-dt = 1.0e-5
-f=1 # sauvegarde tous les f points
-time = 1
+dt = 8.9999e-5
+f=99999.9 # sauvegarde tous les f points
+time = 1000
 Steps = time/dt # nombre de pas
 N_fs = int(1/((f-0.1)*dt)) # enregistrement tous les N_fs pas 
 ############ parameters for the PINN ############
@@ -421,15 +438,15 @@ model.to(device)
 
 
 nbr_initial_t = 1     # Only t=0 for defining the initial condition
-t_min = 0    # t initial pour la grille          
-t_max = 1 # tmax pour la grille 
+t_min = 0.1*time    # t initial pour la grille          
+t_max = time # tmax pour la grille 
 
 
 ############# initialization of dataset for training #################
 
 # sample m points consécutifs à un tps au hasard sur les shells pour calculer loss physic 
 
-
+#point_grille = Npts-debut
 initial_train_dataset = initials_variables_data(Data_ic,nbr_initial_t,k_min,k_max)
 boundary_train_dataset = boundary_variables_data(X_boundary=Data_bc,Npts=Npts,time=time,f=f,dt=dt)
 colocation_dataset = colocations_variables_data(Data_train)
@@ -464,11 +481,11 @@ Dataloader_grid = DataLoader(grid_dataset,batch_sampler=sampler_grid)
 #print(solution[-1,])
 #print("RK4 returned array of shape", solution.shape)
 
-test_loss(Data_train=Data_shell,grille_datatset=grid_dataset)
+#test_loss(Data_train=Data_shell,grille_datatset=grid_dataset)
 
 
 
-learning_rate,nbr_iteration,w_1,w_2,w3,w_4 = 0.001,1000,1,1,1,1
+learning_rate,nbr_iteration,w_1,w_2,w3,w_4 = 0.001,10,1,1,1,1
 t = Train_PINN(learning_rate,nbr_iteration,w_1,w_2,w3,w_4)
 Total_loss = t.train()
 model.eval().to(device)
