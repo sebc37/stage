@@ -39,7 +39,7 @@ class GOY_PINN(nn.Module):
 
 # classe pour transformer les données en jeu de donnée des condittions initiales 
 class initials_variables_data(Dataset):
-    def __init__(self,X_ic,nbr_initial_t,k_min,k_max): # conditions initiales à t=0 et k sur l'ensemble des k
+    def __init__(self,X_ic,nbr_initial_t,k_min,k_max,t_0): # conditions initiales à t=0 et k sur l'ensemble des k
         
         #initialise the variables
         self.k_min = k_min
@@ -48,7 +48,7 @@ class initials_variables_data(Dataset):
         self.nbr_initial_t = nbr_initial_t
         
         self.x_initial = np.array([k for k in range(k_min,k_max*2)],dtype="float32") # shells selected for initial conditions
-        self.t_initial = np.array([0 for _ in range(self.nbr_initial_t)],dtype="float32")  # 0 since the initial condition is defined for t=0
+        self.t_initial = np.array([t_0 for _ in range(self.nbr_initial_t)],dtype="float32")  # 0 since the initial condition is defined for t=0
         
         # transform data and grid to the shape (k,t,u)
         self.tensor_data_ic = torch.tensor(self.X_ic, dtype=torch.float32)
@@ -73,7 +73,7 @@ class initials_variables_data(Dataset):
 class boundary_variables_data(Dataset):
     def __init__(self,X_boundary,Npts,time,f,dt):
         
-        N_fs = int(1/((f-0.1)*dt))
+        #N_fs = int(1/((f-0.1)*dt))
         self.X_boundary = torch.from_numpy(X_boundary[0:Npts,:])
         self.nb_k = np.shape(X_boundary)[1]
         self.nb_t = np.shape(X_boundary)[0]

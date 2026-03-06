@@ -447,7 +447,7 @@ t_max = time # tmax pour la grille
 # sample m points consécutifs à un tps au hasard sur les shells pour calculer loss physic 
 
 #point_grille = Npts-debut
-initial_train_dataset = initials_variables_data(Data_ic,nbr_initial_t,k_min,k_max)
+initial_train_dataset = initials_variables_data(Data_ic,nbr_initial_t,k_min,k_max,t_0=t_min)
 boundary_train_dataset = boundary_variables_data(X_boundary=Data_bc,Npts=Npts,time=time,f=f,dt=dt)
 colocation_dataset = colocations_variables_data(Data_train)
 grid_dataset = grid_data(k_min,k_max,t_min,t_max,Npts=Npts)
