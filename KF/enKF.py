@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
@@ -22,25 +23,48 @@ def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
     for j in range(mode_min,mode_max):
         for i in range(t_min,nb_line):
             if (np.random.random()<=ratio):
-                X_filtered[i,j] = X_subset[i,j]
+                X_filtered[i,j] = X_subset[i,j] #+ np.random.normal(0,1) 
                 X_posx.append(j)
                 X_posy.append(i)
-                X_value.append((X_subset[i,j]-mean_mode[j])/std_mode[j] + np.random.random()) # centré réduit
+                X_value.append(np.random.normal(0,1) + (X_subset[i,j]-mean_mode[j])/std_mode[j]) # centré réduit
 
             else:
                 X_filtered[i,j] = None
     
+    
+    Y = np.zeros((nb_line,nb_column))
+    Y[:,:] = None
+    Y[X_posy,X_posx] =  X_value #X_filtered[X_posy,X_posx] # on ajoute du bruit gaussien aux observations
+
     pourcentage_filtered = nb_line*ratio/nb_line*100
     X_dataset.append(X_posx)
     X_dataset.append(X_posy)
     X_dataset.append(X_value)
-    return X_filtered,X_dataset,mean_mode,var_mode,std_mode,pourcentage_filtered
+
+
+    return X_filtered,X_dataset,mean_mode,var_mode,std_mode,pourcentage_filtered,Y
 
 
 def reduced_center(X,mean,std):
     for k in range(X.shape[1]):
         X[:,k]= (X[:,k]-mean[k])/std[k]
     return X
+
+# etape 1
+# filter doit sortir une matrice des Uk,t donc transposé de ce qu'il il ya maintement et de meme taille que data_shell avec des nan pour les valeurs non sélectionnées
+
+# etape 2 
+# écrire la matrice H pour les observations on prend les modes 5,6,7,8,9,10
+
+#etape 3 
+# écrire la fonction m qui met a jour le modèle dynamique des shells avec equatioons différentes pour les modes 1,2
+# et les modes 9 et 10. le schéma d'intégration doit être Adam bashforth 2
+
+# étape 4
+# implémenter l'enKF avec les fonctions m et H écrites précédement et tester l'enKF
+# utiliser l'algo d'optimisation de la variance pour trouver les meilleurs var_Q et var_R
+# comparer réultats des enKF 
+
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
@@ -64,10 +88,20 @@ k_bc_max = 4
 
 
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
-Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
+Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, Y = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
+Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
 
 
-Data_shell = reduced_center(Data_shell,mean,Std_mode)
+y_obs = Y.T
+
+
+# for i in range(np.shape(y)[0]):
+#     plt.figure()
+#     plt.plot(y[i,:],'*')
+#     plt.plot(Data_shell[:,i],'gray',alpha=0.5)
+#     plt.savefig(PATH + "ploty",dpi=300)
+
+
 
 
 ### parameters
@@ -96,12 +130,81 @@ R      = var_R*np.eye(p,p)
 
 
 ### nonlinear and linear operators of the state-space model
+def NL(x_past_real,x_past_imag,t):
+    K = 1.0
+    eps = 0.5
+    lmb = 2.0
+    n = np.shape(x_past_real)[0]
+    NL_re = np.zeros(n)
+    NL_im = np.zeros(n)    
+    
+    NL_re[0] = x_past_real[2]*x_past_imag[1] + x_past_imag[2]*x_past_real[1]
+    NL_re[1] = x_past_real[3]*x_past_imag[2] + x_past_imag[3]*x_past_real[2] - (eps/lmb)*K[1]*(x_past_real[0]*x_past_imag[2] + x_past_imag[0]*x_past_real[2])
+
+    NL_im[0] = x_past_real[2]*x_past_real[1] - x_past_imag[2]*x_past_imag[1]
+    NL_im[1] = x_past_real[3]*x_past_real[2] - x_past_imag[3]*x_past_imag[2] - (eps/lmb)*K[i]*(x_past_real[0]*x_past_real[2] - x_past_imag[0]*x_past_imag[2])
+
+    for i in range(2,n-2):
+        NL_im[i]  =  K[i]*(x_past_real[i+1,t]*x_past_imag[i+2,t] + x_past_imag[i+1,t]*x_past_real[i+2,t]) 
+
+        -K[i]*(eps/lmb)*(x_past_real[i-1,t]*x_past_imag[i+1,t] + x_past_imag[i-1,t]*x_past_real[i+1,t]) 
+                
+        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2,t]*x_past_imag[i-1,t] + x_past_imag[i-2,t]*x_past_real[i-1,t])
+
+        
+
+        NL_re[i] = K[i]*(x_past_real[i+1,t]*x_past_real[i+2,t] - x_past_imag[i+1,t]*x_past_imag[i+2,t]) 
+        
+        -K[i]*(eps/lmb)*(x_past_real[i-1,t]*x_past_real[i+1,t] - x_past_imag[i-1,t]*x_past_imag[i+1,t]) 
+            
+        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2,t]*x_past_real[i-1,t] - x_past_imag[i-2,t]*x_past_imag[i-1,t]) 
+
+    NL_re[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3,t]*x_past_imag[n-1,t] + x_past_imag[n-3,t]*x_past_real[n-1,t])  
+    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4,t]*x_past_imag[n-3,t] + x_past_imag[n-4,t]*x_past_real[n-3,t])
+    
+    NL_re[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3,t]*x_past_imag[n-2,t] + x_past_imag[n-3,t]*x_past_real[n-2,t])
+    
+    NL_im[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3,t]*x_past_real[n-1,t] + x_past_imag[n-3,t]*x_past_imag[n-1,t])
+    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4,t]*x_past_real[n-3,t] + x_past_imag[n-4,t]*x_past_imag[n-3,t])
+
+    NL_im[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3,t]*x_past_real[n-2,t] - x_past_imag[n-3,t]*x_past_imag[n-2,t])
+
+
+    return NL_re, NL_im
+
 def m(x_past):
-    x_future = x_past
-    x_future[0] = x_past[0]+x_past[2] ### A CACHER
-    x_future[1] = x_past[1]+x_past[3] ### A CACHER
-    x_future[2] = x_past[2] ### A CACHER
-    x_future[3] = x_past[3] ### A CACHER
+
+    dT = 1.0e-5
+    eps = 0.5
+    lmb = 2.0
+    nu = 1.0e-7
+
+    x_past_real = x_past[0::2,0] # Reels
+    x_past_imag = x_past[1::2,0] # Imaginaires
+
+    x_future_real = x_past[0::2,1] # Un Reels
+    x_future_imag = x_past[1::2,1] # Un Imagin
+
+    n = np.shape(x_past_real)[0]
+
+    NL_re_pp, NL_im_pp = NL(x_past_real,x_past_imag,t=0)
+    NL_re_p, NL_im_p = NL(x_future_real,x_future_imag,t=0)
+    
+    x_future = np.zeros((2*n,2))
+    x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
+    
+    for i in range(n):
+        if i!=3:
+            x_future_imag[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
+            x_future_real[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))
+
+        else:
+            x_future_imag[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
+            x_future_real[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))  # x1(t+1) = x1(t) + x1_dot(t)
+        
+        x_future[2*i,1] = x_future_real[i]
+        x_future[2*i+1,1] = x_future_imag[i]
+    
     return x_future
 H = array([[1,0,0,0], [0,1,0,0]])
 
