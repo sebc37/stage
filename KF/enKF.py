@@ -85,12 +85,13 @@ k_max_collocation = 10
 k_bc_min = 0
 k_bc_max = 4 
 
-
-
+k0 = 0.125
+lmb = 2.0
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, Y = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
 Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
 
+K = [k0*lmb**i for i in range(22)]
 
 y_obs = Y.T
 
@@ -105,7 +106,7 @@ y_obs = Y.T
 
 
 ### parameters
-n     = 20 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20 variables d'état
+n     = 22 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20 variables d'état
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
@@ -128,10 +129,10 @@ R      = var_R*np.eye(p,p)
 # x = c_[x1, x2, x1_dot, x2_dot].T # true state
 # y = c_[x1, x2].T + randn(p,nb) # noisy observations
 
-
+x_past = np.random.normal(0,1,size=((n,2))) # state at time t-1 and t-2 for the model m
 ### nonlinear and linear operators of the state-space model
 def NL(x_past_real,x_past_imag,t):
-    K = 1.0
+    
     eps = 0.5
     lmb = 2.0
     n = np.shape(x_past_real)[0]
@@ -142,32 +143,32 @@ def NL(x_past_real,x_past_imag,t):
     NL_re[1] = x_past_real[3]*x_past_imag[2] + x_past_imag[3]*x_past_real[2] - (eps/lmb)*K[1]*(x_past_real[0]*x_past_imag[2] + x_past_imag[0]*x_past_real[2])
 
     NL_im[0] = x_past_real[2]*x_past_real[1] - x_past_imag[2]*x_past_imag[1]
-    NL_im[1] = x_past_real[3]*x_past_real[2] - x_past_imag[3]*x_past_imag[2] - (eps/lmb)*K[i]*(x_past_real[0]*x_past_real[2] - x_past_imag[0]*x_past_imag[2])
+    NL_im[1] = x_past_real[3]*x_past_real[2] - x_past_imag[3]*x_past_imag[2] - (eps/lmb)*K[1]*(x_past_real[0]*x_past_real[2] - x_past_imag[0]*x_past_imag[2])
 
     for i in range(2,n-2):
-        NL_im[i]  =  K[i]*(x_past_real[i+1,t]*x_past_imag[i+2,t] + x_past_imag[i+1,t]*x_past_real[i+2,t]) 
+        NL_im[i]  =  K[i]*(x_past_real[i+1]*x_past_imag[i+2] + x_past_imag[i+1]*x_past_real[i+2]) 
 
-        -K[i]*(eps/lmb)*(x_past_real[i-1,t]*x_past_imag[i+1,t] + x_past_imag[i-1,t]*x_past_real[i+1,t]) 
+        -K[i]*(eps/lmb)*(x_past_real[i-1]*x_past_imag[i+1] + x_past_imag[i-1]*x_past_real[i+1]) 
                 
-        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2,t]*x_past_imag[i-1,t] + x_past_imag[i-2,t]*x_past_real[i-1,t])
+        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2]*x_past_imag[i-1] + x_past_imag[i-2]*x_past_real[i-1])
 
         
 
-        NL_re[i] = K[i]*(x_past_real[i+1,t]*x_past_real[i+2,t] - x_past_imag[i+1,t]*x_past_imag[i+2,t]) 
+        NL_re[i] = K[i]*(x_past_real[i+1]*x_past_real[i+2] - x_past_imag[i+1]*x_past_imag[i+2]) 
         
-        -K[i]*(eps/lmb)*(x_past_real[i-1,t]*x_past_real[i+1,t] - x_past_imag[i-1,t]*x_past_imag[i+1,t]) 
+        -K[i]*(eps/lmb)*(x_past_real[i-1]*x_past_real[i+1] - x_past_imag[i-1]*x_past_imag[i+1]) 
             
-        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2,t]*x_past_real[i-1,t] - x_past_imag[i-2,t]*x_past_imag[i-1,t]) 
+        + K[i]*((eps-1)/lmb**2)*(x_past_real[i-2]*x_past_real[i-1] - x_past_imag[i-2]*x_past_imag[i-1]) 
 
-    NL_re[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3,t]*x_past_imag[n-1,t] + x_past_imag[n-3,t]*x_past_real[n-1,t])  
-    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4,t]*x_past_imag[n-3,t] + x_past_imag[n-4,t]*x_past_real[n-3,t])
+    NL_re[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3]*x_past_imag[n-1] + x_past_imag[n-3]*x_past_real[n-1])  
+    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4]*x_past_imag[n-3] + x_past_imag[n-4]*x_past_real[n-3])
     
-    NL_re[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3,t]*x_past_imag[n-2,t] + x_past_imag[n-3,t]*x_past_real[n-2,t])
+    NL_re[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3]*x_past_imag[n-2] + x_past_imag[n-3]*x_past_real[n-2])
     
-    NL_im[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3,t]*x_past_real[n-1,t] + x_past_imag[n-3,t]*x_past_imag[n-1,t])
-    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4,t]*x_past_real[n-3,t] + x_past_imag[n-4,t]*x_past_imag[n-3,t])
+    NL_im[n-2] = -(eps/lmb)*K[n-2]*(x_past_real[n-3]*x_past_real[n-1] + x_past_imag[n-3]*x_past_imag[n-1])
+    + K[n-2]*((eps-1)/lmb**2)*(x_past_real[n-4]*x_past_real[n-3] + x_past_imag[n-4]*x_past_imag[n-3])
 
-    NL_im[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3,t]*x_past_real[n-2,t] - x_past_imag[n-3,t]*x_past_imag[n-2,t])
+    NL_im[n-1] = K[n-1]*((eps-1)/lmb**2)*(x_past_real[n-3]*x_past_real[n-2] - x_past_imag[n-3]*x_past_imag[n-2])
 
 
     return NL_re, NL_im
@@ -192,20 +193,31 @@ def m(x_past):
     
     x_future = np.zeros((2*n,2))
     x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
-    
+    x_future_r = np.zeros(n)
+    x_future_i = np.zeros(n)
     for i in range(n):
         if i!=3:
-            x_future_imag[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
-            x_future_real[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))
+            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
+            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))
 
         else:
-            x_future_imag[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
-            x_future_real[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))  # x1(t+1) = x1(t) + x1_dot(t)
+            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
+            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))  # x1(t+1) = x1(t) + x1_dot(t)
         
         x_future[2*i,1] = x_future_real[i]
         x_future[2*i+1,1] = x_future_imag[i]
     
     return x_future
+
+series = np.zeros((n,100))
+series[:,0] = x_past[:,0]
+series[:,1] = x_past[:,1]
+
+for i in range(2,100):
+    update = m(x_past)
+    series[:,i] = update[:,1]
+    x_past = update
+
 H = array([[1,0,0,0], [0,1,0,0]])
 
 ### Ensemble Kalman initialization
