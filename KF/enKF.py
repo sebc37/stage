@@ -197,12 +197,12 @@ def m(x_past):
     x_future_i = np.zeros(n)
     for i in range(n):
         if i!=3:
-            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
-            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))
+            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i]))
+            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i]))
 
         else:
-            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p - (1/2)*NL_im_pp))
-            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p - (1/2)*NL_re_pp))  # x1(t+1) = x1(t) + x1_dot(t)
+            x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i]))
+            x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i]))  # x1(t+1) = x1(t) + x1_dot(t)
         
         x_future[2*i,1] = x_future_real[i]
         x_future[2*i+1,1] = x_future_imag[i]

@@ -78,21 +78,61 @@ class Train_PINN():
                 u_t_im = u_t[:,1::2]
                 u_t_real = u_t[:,::2]
                 # on veut calculer la loss physique sur le shells où il y a des collocations points
-                GOY_physics_im = torch.zeros(Npts,(k_max-2 - k_min_collocation)).to(device)
-                GOY_physics_real = torch.zeros(Npts,(k_max-2 - k_min_collocation)).to(device)
+                GOY_physics_im = torch.zeros(Npts,k_max).to(device)
+                GOY_physics_real = torch.zeros(Npts,k_max).to(device)
                 #print(GOY_physics.shape)
-                for i in range (k_min_collocation,k_max-2):
-                    GOY_physics_im[:,i-k_min_collocation] = u_t_im[:,i] 
-                    - K[i]*(u_pd_real[:,i+1]*u_pd_real[:,i+2] - u_pd_im[:,i+2]*u_pd_im[:,i+1])
-                    -(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_real[:,i+1] - u_pd_im[:,i-1]*u_pd_im[:,i+1])
-                    -((eps-1)/(lmb**2))*K[i]*(u_pd_real[:,i-2]*u_pd_real[:,i-1] - u_pd_im[:,i-2]*u_pd_im[:,i-1])
-                    -nu*(K[i]**2)*u_pd_im[:,i]
 
-                    GOY_physics_real[:,i-k_min_collocation] = u_t_real[:,i] 
+                ################# CALCUL LOSS PHYSIC ################################
+
+                # calcul sur les premiers modes
+                GOY_physics_im[:,0] = u_t_im[:,0] - K[0]*(u_pd_real[:,1]*u_pd_real[:,2] - u_pd_im[:,1]*u_pd_im[:,2]) 
+                + nu*(K[0]**2)*u_pd_im[:,0]
+                
+                GOY_physics_im[:,1] = u_t_im[:,1] -K[1]*(u_pd_real[:,2]*u_pd_real[:,3] - u_pd_im[:,2]*u_pd_im[:,3])
+                +(eps/lmb)*K[1]*(u_pd_real[:,0]*u_pd_real[:,2] - u_pd_im[:,0]*u_pd_im[:,2])
+                + nu*(K[1]**2)*u_pd_im[:,1]
+
+                GOY_physics_real[:,0] = u_t_real[:,0] - K[0]*(u_pd_real[:,1]*u_pd_im[:,2] - u_pd_im[:,1]*u_pd_real[:,2]) 
+                + nu*(K[0]**2)*u_pd_real[:,0]
+                
+                GOY_physics_real[:,1] = u_t_real[:,1] -K[1]*(u_pd_real[:,2]*u_pd_im[:,3] - u_pd_im[:,2]*u_pd_real[:,3])
+                +(eps/lmb)*K[1]*(u_pd_real[:,0]*u_pd_im[:,2] - u_pd_im[:,0]*u_pd_real[:,2])
+                + nu*(K[1]**2)*u_pd_real[:,1]
+
+
+                # cacul à l'intétrieur du domaine
+                for i in range (2,k_max-2):
+                    GOY_physics_im[:,i] = u_t_im[:,i] 
+                    - K[i]*(u_pd_real[:,i+1]*u_pd_real[:,i+2] - u_pd_im[:,i+2]*u_pd_im[:,i+1])
+                    +(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_real[:,i+1] - u_pd_im[:,i-1]*u_pd_im[:,i+1])
+                    -((eps-1)/(lmb**2))*K[i]*(u_pd_real[:,i-2]*u_pd_real[:,i-1] - u_pd_im[:,i-2]*u_pd_im[:,i-1])
+                    +nu*(K[i]**2)*u_pd_im[:,i]
+
+                    GOY_physics_real[:,i] = u_t_real[:,i] 
                     - K[i]*(u_pd_real[:,i+1]*u_pd_im[:,i+2] - u_pd_real[:,i+2]*u_pd_im[:,i+1])
-                    -(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_im[:,i+1] - u_pd_im[:,i-1]*u_pd_real[:,i+1])
+                    +(eps/lmb)*K[i]*(u_pd_real[:,i-1]*u_pd_im[:,i+1] - u_pd_im[:,i-1]*u_pd_real[:,i+1])
                     -((eps-1)/(lmb**2))*K[i]*(u_pd_real[:,i-2]*u_pd_im[:,i-1] - u_pd_im[:,i-2]*u_pd_real[:,i-1])
-                    -nu*(K[i]**2)*u_pd_real[:,i]
+                    +nu*(K[i]**2)*u_pd_real[:,i]
+
+                # calcul sur les derniers modes
+                GOY_physics_im[:,k_max-2] = u_t_im[:,k_max-2] 
+                + K[k_max-2]*(eps/lmb)*(u_pd_real[:,k_max-3]*u_pd_real[:,k_max-1]-u_pd_im[:,k_max-3]*u_pd_real[:,k_max-1])
+                - K[k_max-2]*((eps-1)/(lmb**2))*(u_pd_real[:,k_max-4]*u_pd_real[:,k_max-3] - u_pd_im[:,k_max-4]*u_pd_im[:,k_max-3])
+                + nu*(K[k_max-2]**2)*u_pd_im[:,k_max-2]
+                
+                GOY_physics_im[:,k_max-1] = u_t_im[:,k_max-1]
+                -((eps-1)/(lmb**2))*K[k_max-1]*(u_pd_real[:,k_max-3]*u_pd_real[:,k_max-2] - u_pd_im[:,k_max-3]*u_pd_im[:,k_max-2])
+                + nu*(K[k_max-1]**2)*u_pd_im[:,k_max-1]
+
+                GOY_physics_real[:,k_max-2] = u_t_real[:,k_max-2] 
+                + K[k_max-2]*(eps/lmb)*(u_pd_real[:,k_max-3]*u_pd_im[:,k_max-1]-u_pd_im[:,k_max-3]*u_pd_real[:,k_max-1])
+                - K[k_max-2]*((eps-1)/(lmb**2))*(u_pd_real[:,k_max-4]*u_pd_im[:,k_max-3] - u_pd_im[:,k_max-4]*u_pd_real[:,k_max-3])
+                + nu*(K[k_max-2]**2)*u_pd_real[:,k_max-2]
+                
+                GOY_physics_real[:,k_max-1] = u_t_real[:,k_max-1]
+                -((eps-1)/(lmb**2))*K[k_max-1]*(u_pd_real[:,k_max-3]*u_pd_im[:,k_max-2] - u_pd_im[:,k_max-3]*u_pd_real[:,k_max-2])
+                + nu*(K[k_max-1]**2)*u_pd_real[:,k_max-1]
+
                     
                     #u_t[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i] # à confirmer
                 loss_physics = self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device)
