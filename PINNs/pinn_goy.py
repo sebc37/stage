@@ -483,7 +483,7 @@ K = [k0*lmb**i for i in range(k_min,k_max)]
 torch.manual_seed(119)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model = GOY_PINN(n_input=2,n_output=1,n_hidden=20,n_layers=8)
+model = GOY_PINN(n_input=2,n_output=1,n_hidden=largeur_couche,n_layers=nb_couche)
 model.to(device)
 
 
@@ -535,7 +535,7 @@ Dataloader_grid = DataLoader(grid_dataset,batch_sampler=sampler_grid)
 
 
 
-learning_rate,nbr_iteration,w_1,w_2,w3,w_4 = 0.001,10,1,1,1,1
+learning_rate,nbr_iteration,w_1,w_2,w3,w_4 = 0.001,nbr_iteration,1,1,1,1
 t = Train_PINN(learning_rate,nbr_iteration,w_1,w_2,w3,w_4)
 Total_loss = t.train()
 model.eval().to(device)
@@ -559,7 +559,7 @@ for i in range(U.shape[1]):
     plt.xlabel('Time')
     plt.ylabel('Velocity')
     plt.legend()
-    plt.savefig(PATH + f"/prediction_u{i}.png")
+    plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/prediction_u{i}.png")
 
 
 
@@ -575,4 +575,4 @@ plt.plot(Total_loss[4],label='initial Conditions Loss' )
 plt.xlabel('Iterations')
 plt.ylabel('Losses')
 plt.legend()
-plt.savefig(PATH + "losses.png")
+plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/losses.png")
