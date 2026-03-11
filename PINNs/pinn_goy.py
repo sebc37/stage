@@ -559,7 +559,7 @@ for i in range(U.shape[1]):
     plt.xlabel('Time')
     plt.ylabel('Velocity')
     plt.legend()
-    plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/prediction_u{i}.png")
+    plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/prediction_u{i}.png") #_{int(ratio*100)}
 
 
 
@@ -575,4 +575,4 @@ plt.plot(Total_loss[4],label='initial Conditions Loss' )
 plt.xlabel('Iterations')
 plt.ylabel('Losses')
 plt.legend()
-plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/losses.png")
+plt.savefig(PATH + f"{nb_couche}x{largeur_couche}_{int(nbr_iteration/1000)}k/losses.png") #_{int(ratio*100)}
