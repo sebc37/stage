@@ -442,8 +442,6 @@ nb_couche = config["PINN"][1]
 largeur_couche = config["PINN"][0]
 nbr_iteration = config["nb_iter"]
 
-print(k_min_collocation)
-print(nb_couche,largeur_couche)
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,ratio,123456)
 
