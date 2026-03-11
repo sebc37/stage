@@ -1,0 +1,19 @@
+PINN:
+    - 64
+    - 8
+
+ratio: 10
+
+k_min_boundary: 0
+
+k_max_boundary: 4
+
+k_min_collocation: 4
+
+k_max_collocation: 10
+
+nb_iter: 10000
+
+path_data: "/home/s26calme/Documents/code_stage/GOY-main/data.dat"
+
+path_graph: "/home/s26calme/Documents/code_stage/GOY-main/"
