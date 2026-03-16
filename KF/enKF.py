@@ -1,5 +1,7 @@
 import numpy as np
+import integration
 import matplotlib.pyplot as plt
+
 
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
@@ -175,10 +177,19 @@ def NL(x_past_real,x_past_imag):
 
 def m(x_past):
 
-    dT = 1.0e-3
+    dT = 1.0e-5
     eps = 0.5
     lmb = 2.0
+    force = 0.005
+    force_rnd = True
+    k0 = 0.125
+    N = 22
     nu = 1.0e-7
+    fs = 100
+    time_end = 1.0e-2
+    integration.GOYParams(force=force,N_force=4,
+                          force_rnd=force_rnd,k0=k0,lmb=lmb,
+                          eps=eps,nu=nu,N=22,dt=dT,fs=100,time=time_end)
 
     x_past_real = np.copy(x_past[0::2,0]) # Reels
     x_past_imag = np.copy(x_past[1::2,0]) # Imaginaires
