@@ -114,8 +114,8 @@ n     = 44 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
-var_Q = 0.1 # error variance of the model (in Kalman)
-var_R = 1 # error variance of the observations (in Kalman)
+var_Q = 0.01 # error variance of the model (in Kalman)
+var_R = 0.1 # error variance of the observations (in Kalman)
 x_0   = np.zeros((n)) # initial coundition (mean)
 P_0   = np.eye(n,n)*1.e-4 # initial coundition (covariance)
 
@@ -295,15 +295,16 @@ for k in range(nb): # forward in time
     # update step
     if(sum(np.isfinite(y_obs[:,k]))>0):
         for i in range(Ne):
-            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
+            x_a_enkf_tmp[:,:,1] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
     else:
-            x_a_enkf_tmp = x_f_enkf_tmp
+            x_a_enkf_tmp[:,:,0] = x_a_enkf_tmp[:,:,1]
+            x_a_enkf_tmp[:,:,1] = x_f_enkf_tmp
             P_a_enkf_tmp = P_f_enkf_tmp 
     # store results
     x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
     P_f_enkf[:,:,k] = P_f_enkf_tmp
-    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1)
+    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp[:,:,1],1)
     P_a_enkf[:,:,k] = P_a_enkf_tmp
 
 
@@ -315,7 +316,7 @@ plt.plot(x_a_enkf[0,:], x_a_enkf[1,:], 'r', label='EnKF ($x^a$)')
 plt.xlabel('$x_1$', fontsize=20)
 plt.ylabel('$x_2$', fontsize=20)
 plt.legend(fontsize=20)
-plt.savefig()
+plt.savefig(SAVE + "fig1enKF")
 ### plot state variables
 plt.figure()
 y_label=('$U_4$', '$U_5$', '$U_6$', '$U_7$')
@@ -328,7 +329,7 @@ for i in range(4,9):
     plt.fill_between(time, x_a_enkf[i,:] - 1.96*np.sqrt(P_a_enkf[i,i,:]), x_a_enkf[i,:] + 1.96*np.sqrt(P_a_enkf[i,i,:]), facecolor='red', alpha=0.5)
     plt.xlabel('Time', size=20)
     plt.ylabel(y_label[i], size=20)
-    
+plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
 print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
 print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
