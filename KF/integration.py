@@ -20,12 +20,12 @@ class GOYParams:
         self.eps = eps #0.5                  # for the NL coefficients
         self.nu = nu #1.0e-7                # viscosity
         self.N = N #22                     # nb of modes
-        
+        self.DO_FIR = True
     # Scheme parameters
         self.dt = dt #1.0e-5                # for integration scheme
         self.fs = fs #100.                 # for data saving (frequency)
         self.time = time #1.0e3               # total simulation time
-    xp=None
+    xp=1
     
 class GOYShellModel:
     """The GOY shell model integrator."""
@@ -48,19 +48,19 @@ class GOYShellModel:
         self.sh = np.zeros(self.p.N)        # wave numbers
         self.X = np.zeros(self.p.N)         # real part of complex amplitude
         self.Y = np.zeros(self.p.N)         # imaginary part
-        if Xp==None:
+        if type(Xp)==type(None):
             self.Xp = np.zeros(self.p.N)        # X at previous timestep
         else:
             self.Xp = Xp
-        if Xpp==None:
+        if type(Xpp)==type(None):
             self.Xpp = np.zeros(self.p.N)       # X at two timesteps ago
         else:
             self.Xpp = Xpp
-        if Yp==None:
+        if type(Yp)==type(None):
             self.Yp = np.zeros(self.p.N)        # Y at previous timestep
         else:
             self.Yp = Yp
-        if Ypp==None:
+        if type(Ypp)==type(None):
             self.Ypp = np.zeros(self.p.N)       # Y at two timesteps ago
         else:
             self.Ypp = Ypp
@@ -257,24 +257,24 @@ class GOYShellModel:
         while count > 0:
             self.integrate()
             
-            if (count % self.N_fs) == 0:
-                # Print progress
-                remaining_steps = int(count / self.N_fs)
-                if not np.isnan(self.X[0]):
-                    print(f"Remaining steps: {remaining_steps}")
-                else:
-                    print(f"Remaining steps: {remaining_steps} : ERROR (NaN detected)")
+            # if (count % self.N_fs) == 0:
+            #     # Print progress
+            #     remaining_steps = int(count / self.N_fs)
+            #     if not np.isnan(self.X[0]):
+            #         print(f"Remaining steps: {remaining_steps}")
+            #     else:
+            #         print(f"Remaining steps: {remaining_steps} : ERROR (NaN detected)")
                 
-                # Save data
-                if self.p.DO_FIR:
-                    self.normalize_FIR(self.Xf)
-                    self.normalize_FIR(self.Yf)
+            #     # Save data
+            #     if self.p.DO_FIR:
+            #         self.normalize_FIR(self.Xf)
+            #         self.normalize_FIR(self.Yf)
                     
                  
-                    self.reset_FIR(self.Xf)
-                    self.reset_FIR(self.Yf)
+            #         self.reset_FIR(self.Xf)
+            #         self.reset_FIR(self.Yf)
             
-                self.N_steps += 1
+            #     self.N_steps += 1
             
             # Evolve fields
             self.Xpp[:] = self.Xp
