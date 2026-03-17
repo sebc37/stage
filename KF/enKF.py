@@ -71,6 +71,7 @@ def reduced_center(X,mean,std):
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
 path_data = PATH + "data.dat"
+SAVE = "/home/s26calme/Documents/code_stage/KF"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
@@ -92,18 +93,18 @@ lmb = 2.0
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc= filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
 Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
-Data_filtered = reduced_center(Data_filtered,mean=mean,std=Std_mode)
+Data_filtered = reduced_center(Data_filtered,mean=mean,std=Std_mode) # données réelles
 
 K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 
 y_obs = Data_filtered.T + np.random.normal(0,1,size=(44,90090)) #noisy observations
 
 
-for i in range(np.shape(y_obs)[0]):
-    plt.figure()
-    plt.plot(y_obs[i,:],'*')
-    plt.plot(Data_shell[:,i],'gray',alpha=0.5)
-    plt.savefig(PATH + "ploty",dpi=300)
+# for i in range(np.shape(y_obs)[0]):
+#     plt.figure()
+#     plt.plot(y_obs[i,:],'*')
+#     plt.plot(Data_shell[:,i],'gray',alpha=0.5)
+#     plt.savefig(PATH + "ploty",dpi=300)
 
 
 
@@ -121,12 +122,7 @@ P_0   = np.eye(n,n)*1.e-4 # initial coundition (covariance)
 ### variables
 Q      = var_Q*np.eye(n,n)
 R      = var_R*np.eye(p,p)
-# x1     = sqrt(time)*cos(2*pi*time/(nb/2)) # true x1 position
-# x2     = sqrt(time)*sin(2*pi*time/(nb/2)) # true x2 position
-# x1_dot = x1[time[1:-1]]-x1[time[0:-2]] # true x1 speed
-# x2_dot = x2[time[1:-1]]-x2[time[0:-2]] # true x2 speed
-# x1_dot = r_[x1_dot[0], x1_dot, x1_dot[-1]]
-# x2_dot = r_[x2_dot[0], x2_dot, x2_dot[-1]]
+
 
 # ### true state and noisy observations
 # x = c_[x1, x2, x1_dot, x2_dot].T # true state
@@ -272,35 +268,67 @@ x_a_enkf = np.zeros((n,nb))   # analysed state
 P_a_enkf = np.zeros((n,n,nb)) # analysed error covariance matrix
 
 ### Ensemble Kalman filter
-x_a_enkf_tmp = np.zeros((n,Ne)) 
+x_a_enkf_tmp = np.zeros((n,Ne,2)) 
 x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
-for i in range(Ne):
-    x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
+for j in range(2):
+    for i in range(Ne):
+        x_a_enkf_tmp[:,i,j] = np.random.multivariate_normal(x_0, P_0)
 
-x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
-P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
+x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp[:,:,1],1) # initial state
+P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp[:,:,1])    # initial state covariance
 
-for k in range(1,nb): # forward in time
+for k in range(nb): # forward in time
     # prediction step
-    for i in range(2,Ne):
-        x_f_enkf_tmp[:,i] = m(x_a_enkf_tmp[:,i-2:i])[:,1] + np.random.multivariate_normal(np.zeros(n), Q) ### A CACHER
+
+    for i in range(Ne):
+        a = x_a_enkf_tmp[:,i,0]
+        b = x_a_enkf_tmp[:,i,1]
+        x_f_enkf_tmp[:,i] = m(np.column_stack((x_a_enkf_tmp[:,i,0],x_a_enkf_tmp[:,i,1])))[:,1] + np.random.multivariate_normal(np.zeros(n), Q) ### A CACHER
         y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
+    
     P_f_enkf_tmp = np.cov(x_f_enkf_tmp) ### A CACHER
     # Kalman gain
     
-    K = P_f_enkf_tmp @ H.T @ np.linalg.inv(H @ P_f_enkf_tmp @ H.T + R) ### A CACHER
+    K_g = P_f_enkf_tmp @ H.T @ np.linalg.inv(H @ P_f_enkf_tmp @ H.T + R) ### A CACHER
     # update step
-    if(sum(np.isfinite(y[:,k]))>0):
+    if(sum(np.isfinite(y_obs[:,k]))>0):
         for i in range(Ne):
-            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K @ (y[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
+            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
     else:
             x_a_enkf_tmp = x_f_enkf_tmp
             P_a_enkf_tmp = P_f_enkf_tmp 
     # store results
-    x_f_enkf[:,k]   = mean(x_f_enkf_tmp,1)
+    x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
     P_f_enkf[:,:,k] = P_f_enkf_tmp
-    x_a_enkf[:,k]   = mean(x_a_enkf_tmp,1)
+    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1)
     P_a_enkf[:,:,k] = P_a_enkf_tmp
+
+
+### plot trajectories (true, observed, KF, EnKF)
+plt.figure()
+plt.plot(Data_shell.T[0,:], Data_shell.T[1,:], 'b', label='True state ($x$)')
+plt.plot(y_obs[0,:], y_obs[1,:], '.k', label='Observations ($y$)')
+plt.plot(x_a_enkf[0,:], x_a_enkf[1,:], 'r', label='EnKF ($x^a$)')
+plt.xlabel('$x_1$', fontsize=20)
+plt.ylabel('$x_2$', fontsize=20)
+plt.legend(fontsize=20)
+plt.savefig()
+### plot state variables
+plt.figure()
+y_label=('$U_4$', '$U_5$', '$U_6$', '$U_7$')
+for i in range(4,9):
+    plt.subplot(2,2,i+1)
+    plt.plot(time, Data_shell.T[2*i,:], 'b')
+    if ((i==1) or (i==2)):
+        plt.plot(time, y_obs[2*i,:], '.k') 
+    plt.plot(time, x_a_enkf[2*i,:], 'r')
+    plt.fill_between(time, x_a_enkf[i,:] - 1.96*np.sqrt(P_a_enkf[i,i,:]), x_a_enkf[i,:] + 1.96*np.sqrt(P_a_enkf[i,i,:]), facecolor='red', alpha=0.5)
+    plt.xlabel('Time', size=20)
+    plt.ylabel(y_label[i], size=20)
+    
+### compute Root Mean Squared Errors (RMSE) of the positions
+print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
+print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
