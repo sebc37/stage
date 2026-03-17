@@ -1,7 +1,7 @@
 import numpy as np
 import integration
 import matplotlib.pyplot as plt
-
+import tqdm
 
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
@@ -279,7 +279,7 @@ for j in range(2):
 x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp[:,:,1],1) # initial state
 P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp[:,:,1])    # initial state covariance
 
-for k in range(nb): # forward in time
+for k in tqdm.tqdm(range(nb)): # forward in time
     # prediction step
 
     for i in range(Ne):
@@ -310,17 +310,17 @@ for k in range(nb): # forward in time
 
 ### plot trajectories (true, observed, KF, EnKF)
 plt.figure()
-plt.plot(Data_shell.T[0,:], Data_shell.T[1,:], 'b', label='True state ($x$)')
-plt.plot(y_obs[0,:], y_obs[1,:], '.k', label='Observations ($y$)')
-plt.plot(x_a_enkf[0,:], x_a_enkf[1,:], 'r', label='EnKF ($x^a$)')
-plt.xlabel('$x_1$', fontsize=20)
-plt.ylabel('$x_2$', fontsize=20)
+plt.plot(Data_shell.T[8,:], 'b', label='True state ($x$)')
+plt.plot(y_obs[8,:], '.k', label='Observations ($y$)')
+plt.plot(x_a_enkf[8,:], 'r', label='EnKF ($x^a$)')
+plt.xlabel('$time$', fontsize=20)
+plt.ylabel('$U_8', fontsize=20)
 plt.legend(fontsize=20)
 plt.savefig(SAVE + "fig1enKF")
 ### plot state variables
 plt.figure()
 y_label=('$U_4$', '$U_5$', '$U_6$', '$U_7$')
-for i in range(4,9):
+for i in range(4,8):
     plt.subplot(2,2,i+1)
     plt.plot(time, Data_shell.T[2*i,:], 'b')
     if ((i==1) or (i==2)):
@@ -331,5 +331,5 @@ for i in range(4,9):
     plt.ylabel(y_label[i], size=20)
 plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
-print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
-print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,9),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
+print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
+print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
