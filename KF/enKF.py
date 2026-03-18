@@ -1,7 +1,29 @@
 import numpy as np
 import integration
+import simulation as s
 import matplotlib.pyplot as plt
 import tqdm
+
+sim = s.ShellModel()
+
+X0 = np.array([sim.sh[i]**(-1/3) 
+                   for i in range(sim.N)])
+X0 *= (1 + 0.1*np.random.randn(sim.N))
+Y0 = np.zeros(sim.N) + 1.0e-4
+
+sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+X2, Y2, t2 = sim.run(T=1000.0, save_every=100)
+print(f"\nRésultat exemple 2 : shape X = {X2.shape}")
+time = np.arange(0,X2.shape[0],1)
+
+plt.plot(time,X2[:,0], 'gray',label='Mode 1',alpha=0.5)
+plt.plot(time,X2[:,1], 'gray',label='Mode 2',alpha=0.5)
+plt.plot(time,X2[:,2], 'gray',label='Mode 3',alpha=0.5)
+plt.plot(time,X2[:,3], 'black',label='Mode 4 Forcing',alpha=1)
+plt.plot(time,X2[:,5], 'gray',label='Mode 6',alpha=0.5)
+plt.plot(time,X2[:,7], 'gray',label='Mode 8',alpha=0.5)
+plt.plot(time,X2[:,9], 'gray',label='Mode 10',alpha=0.5)
+plt.savefig(r"/home/s26calme/Documents/code_stage/KF/c_encapsulate")
 
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
