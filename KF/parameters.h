@@ -9,7 +9,7 @@
 // model parameters:
 #define force 0.005 // strength of the random forcing
 #define N_force 4   // mode which is forced
-#define force_rnd 1 // random forcing (1) or deterministic (0)
+#define force_rnd 0 // random forcing (1) or deterministic (0)
 #define k0 0.125    // largest scale
 #define lmb 2.0     // ratio between consecutive scales
 #define eps 0.5     // for the NL coefficients

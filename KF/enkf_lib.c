@@ -1,6 +1,6 @@
 /*
  * enkf_lib.c
- * Intègre X, Y sur n pas de temps.
+ * Intègre X, Y sur n pas de temps en conservant l'historique entre appels.
  *
  * Compilation :
  *   gcc -shared -fPIC -O2 -o enkf_lib.so enkf_lib.c -lm
@@ -61,78 +61,86 @@ static void init_coeffs(State *s)
     s->D[N_force] = 1.0;
 }
 
-static void init_history(State *s, double *X_in, double *Y_in)
-{   int i;
-    for (i=0; i<N; i++) { s->Xpp[i]=X_in[i]; s->Ypp[i]=Y_in[i]; }
-    compute_NX(s, s->Xpp, s->Ypp, s->NXpp);
-    compute_NY(s, s->Xpp, s->Ypp, s->NYpp);
-    for (i=0; i<N; i++) {
-        s->Xp[i] = s->A[i]*(s->Xpp[i] + DT*s->NXpp[i]);
-        s->Yp[i] = s->A[i]*(s->Ypp[i] + DT*s->NYpp[i]);
-    }
-    compute_NX(s, s->Xp, s->Yp, s->NXp);
-    compute_NY(s, s->Xp, s->Yp, s->NYp);
-    s->initialized = 1;
-}
-
-static void do_step(State *s, double *X_out, double *Y_out)
+static void do_step(State *s)
 {   int i;
     double f1 = FORCE_RND ? FORCE_AMP * drand48() : FORCE_AMP;
     double f2 = FORCE_RND ? FORCE_AMP * drand48() : FORCE_AMP;
+    double tmpX[N], tmpY[N];
 
     for (i=0; i<N; i++) {
-        X_out[i] = s->A[i]*s->Xp[i]
-                 + 1.5*DT*s->A[i]*s->NXp[i]
-                 - 0.5*DT*s->A[i]*s->A[i]*s->NXpp[i]
-                 + DT*f1*s->D[i];
-        Y_out[i] = s->A[i]*s->Yp[i]
-                 + 1.5*DT*s->A[i]*s->NYp[i]
-                 - 0.5*DT*s->A[i]*s->A[i]*s->NYpp[i]
-                 + DT*f2*s->D[i];
+        tmpX[i] = s->A[i]*s->Xp[i]
+                + 1.5*DT*s->A[i]*s->NXp[i]
+                - 0.5*DT*s->A[i]*s->A[i]*s->NXpp[i]
+                + DT*f1*s->D[i];
+        tmpY[i] = s->A[i]*s->Yp[i]
+                + 1.5*DT*s->A[i]*s->NYp[i]
+                - 0.5*DT*s->A[i]*s->A[i]*s->NYpp[i]
+                + DT*f2*s->D[i];
     }
     for (i=0; i<N; i++) {
         s->Xpp[i]=s->Xp[i];   s->Ypp[i]=s->Yp[i];
         s->NXpp[i]=s->NXp[i]; s->NYpp[i]=s->NYp[i];
-        s->Xp[i]=X_out[i];    s->Yp[i]=Y_out[i];
+        s->Xp[i]=tmpX[i];     s->Yp[i]=tmpY[i];
+        s->X[i]=tmpX[i];      s->Y[i]=tmpY[i];
     }
     compute_NX(s, s->Xp, s->Yp, s->NXp);
     compute_NY(s, s->Xp, s->Yp, s->NYp);
 }
 
 /* ================================================================== */
-/* API                                                                 */
+/* État global unique                                                  */
 /* ================================================================== */
 static State _s = {.initialized = 0};
 
+/* ================================================================== */
+/* API                                                                 */
+/* ================================================================== */
+
 /*
- * step_n(X_in, Y_in, X_out, Y_out, n_steps)
- * Intègre n_steps pas à partir de (X_in, Y_in).
- * Retourne l'état final dans (X_out, Y_out).
+ * init(X_in, Y_in)
+ * Initialise l'historique Adams-Bashforth depuis (X_in, Y_in).
+ * À appeler UNE SEULE FOIS au début, ou après reset().
  */
-void step_n(double *X_in, double *Y_in,
-            double *X_out, double *Y_out,
-            int n_steps)
-{   int i, s;
-    double tmpX[N], tmpY[N];
-
+void init(double *X_in, double *Y_in)
+{   int i;
     if (!_s.initialized) init_coeffs(&_s);
-    init_history(&_s, X_in, Y_in);
 
-    /* n_steps - 1 pas intermédiaires (résultat dans tmpX/tmpY) */
-    for (s=0; s<n_steps-1; s++)
-        do_step(&_s, tmpX, tmpY);
+    /* Xpp = CI */
+    for (i=0; i<N; i++) { _s.Xpp[i]=X_in[i]; _s.Ypp[i]=Y_in[i]; }
+    compute_NX(&_s, _s.Xpp, _s.Ypp, _s.NXpp);
+    compute_NY(&_s, _s.Xpp, _s.Ypp, _s.NYpp);
 
-    /* dernier pas → directement dans X_out / Y_out */
-    do_step(&_s, X_out, Y_out);
+    /* Xp = un pas Euler pour amorcer */
+    for (i=0; i<N; i++) {
+        _s.Xp[i] = _s.A[i]*(_s.Xpp[i] + DT*_s.NXpp[i]);
+        _s.Yp[i] = _s.A[i]*(_s.Ypp[i] + DT*_s.NYpp[i]);
+    }
+    compute_NX(&_s, _s.Xp, _s.Yp, _s.NXp);
+    compute_NY(&_s, _s.Xp, _s.Yp, _s.NYp);
+
+    _s.initialized = 1;
+}
+
+/*
+ * step_n(X_out, Y_out, n_steps)
+ * Avance de n_steps pas et retourne l'état final.
+ * L'historique est CONSERVÉ entre les appels successifs.
+ * Appeler init() avant le premier step_n().
+ */
+void step_n(double *X_out, double *Y_out, int n_steps)
+{   int s;
+    for (s=0; s<n_steps; s++) do_step(&_s);
+    int i;
+    for (i=0; i<N; i++) { X_out[i]=_s.X[i]; Y_out[i]=_s.Y[i]; }
 }
 
 /*
  * reset()
- * Réinitialise l'historique (à appeler après une mise à jour externe).
+ * Force la réinitialisation (à appeler si tu changes l'état extérieurement).
  */
 void reset() { _s.initialized = 0; }
 
-int  get_N()            { return N; }
+int  get_N()             { return N; }
 void get_sh(double *out) {
     int i; State tmp; init_coeffs(&tmp);
     for (i=0; i<N; i++) out[i] = tmp.sh[i];

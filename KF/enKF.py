@@ -160,7 +160,7 @@ def reduced_center(X,mean,std):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data.dat"
+path_data = PATH + "data_test.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
@@ -360,8 +360,10 @@ series = np.zeros((n,9999))
 series[:,0] = x_past[:,0]
 series[:,1] = x_past[:,1]
 
-for i in range(2,9999):
-    update = m_bis(series[:,i-1],n_steps=1000)
+update = m_bis(series[:,1],n_steps=997)
+series[:,2] = update
+for i in range(3,9999):
+    update = m_bis(series[:,i-1],n_steps=999)
     series[:,i] = update
 #     a = series[:,i-2:i]
 #     update = m(series[:,i-2:i])
@@ -370,13 +372,20 @@ for i in range(2,9999):
 base = np.zeros_like(series)
 base[0::2,:] = X1.T
 base[1::2,:] = Y1.T
+data = data.T
+Rmse = np.sqrt(np.mean(data[:,0:9999]-series)**2)
 
-Rmse = np.sqrt(np.mean(base-series)**2)
 plt.figure()
 
 for i in range(10):
-     plt.plot(series[2*i,:])
+     plt.plot(np.abs(series[2*i,:]-data[2*i,0:9999]))
 plt.savefig("test")
+
+
+plt.figure()
+for i in range(10):
+     plt.plot(np.abs(base[2*i,:]-data[2*i,0:9999]))
+plt.savefig("test_2")
 
 ### Generate observations and covariance
 def generate_observations(p, H):
