@@ -1,31 +1,97 @@
 import numpy as np
-import integration
+#import integration
 import simulation as s
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import tqdm
+import ctypes
+
+lib = ctypes.CDLL("/home/s26calme/Documents/code_stage/KF/enkf_lib.so")
+
+_ptr = ctypes.POINTER(ctypes.c_double)
+
+lib.step_n.restype  = None
+lib.step_n.argtypes = [_ptr, _ptr, _ptr, _ptr, ctypes.c_int]
+lib.reset.restype   = None
+lib.get_N.restype   = ctypes.c_int
+
+N = lib.get_N()
+
 
 sim = s.ShellModel()
-# mes_sh = np.array([ 0.125*2.0**i for i in range(sim.N)])
-# sim.set_sh(mes_sh)
-# X0 = np.array([sim.sh[i]**(-1/3) 
-#                    for i in range(sim.N)])
-# #X0 *= (1 + 0.1*np.random.randn(sim.N))
-# Y0 = np.zeros(sim.N) + 1.0e-4
 
-# sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+
+
+# sim = s.ShellModel()
+
+# --- Run 1 : init_default ---
 sim.init_default()
-X2, Y2, t2 = sim.run(T=100.0, save_every=100)
-print(f"\nRésultat exemple 2 : shape X = {X2.shape}")
-time = np.arange(0,X2.shape[0],1)
+sh = sim.sh.copy()
+X1, Y1, t = sim.run(T=10.0, save_every=100)
 
-plt.plot(time,X2[:,0], 'gray',label='Mode 1',alpha=0.5)
-plt.plot(time,X2[:,1], 'gray',label='Mode 2',alpha=0.5)
-plt.plot(time,X2[:,2], 'gray',label='Mode 3',alpha=0.5)
-plt.plot(time,X2[:,3], 'black',label='Mode 4 Forcing',alpha=1)
-plt.plot(time,X2[:,5], 'gray',label='Mode 6',alpha=0.5)
-plt.plot(time,X2[:,7], 'gray',label='Mode 8',alpha=0.5)
-plt.plot(time,X2[:,9], 'gray',label='Mode 10',alpha=0.5)
-plt.savefig(r"/home/s26calme/Documents/code_stage/KF/c_encapsulate")
+# # --- Run 2 : init_custom avec les mêmes CI ---
+# X0 = sh**(-1/3)
+# Y0 = np.ones(sim.N) * 1e-4
+# sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+# X2, Y2, t = sim.run(T=1.0, save_every=100)
+
+# Comparaison
+# print("Max diff X :", np.max(np.abs(X1 - X2)))
+# print("Max diff Y :", np.max(np.abs(Y1 - Y2)))
+
+def plot_im_xy(X,Y,t):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # --- X ---
+    im1 = axes[0].imshow(np.abs(X).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
+                        extent=[t[0], t[-1], 0, sim.N-1],
+                        )
+    axes[0].set_xlabel("Temps")
+    axes[0].set_ylabel("Shell n°")
+    axes[0].set_title("X (partie réelle)")
+    plt.colorbar(im1, ax=axes[0], label="Amplitude")
+
+    # --- Y ---
+    im2 = axes[1].imshow(np.abs(Y).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
+                        extent=[t[0], t[-1], 0, sim.N-1],
+                        )
+    axes[1].set_xlabel("Temps")
+    axes[1].set_ylabel("Shell n°")
+    axes[1].set_title("Y (partie imaginaire)")
+    plt.colorbar(im2, ax=axes[1], label="Amplitude")
+
+    plt.tight_layout()
+    plt.savefig("XY_intensite.png", dpi=150)
+    plt.show()
+    E = X**2 + Y**2   # shape (n_snapshots, N)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    im = ax.imshow(E.T, aspect='auto', origin='lower',
+                extent=[t[0], t[-1], 0, sim.N-1],
+                norm=LogNorm(), cmap='inferno')
+    ax.set_xlabel("Temps")
+    ax.set_ylabel("Shell n°")
+    ax.set_title("Énergie par shell E(n,t) = X² + Y²")
+    plt.colorbar(im, ax=ax, label="Énergie")
+    plt.tight_layout()
+    plt.show()
+    plt.savefig("Energie.png", dpi=150)
+
+# plot_im_xy(X2,Y2)
+
+# sim.init_default()
+# X2, Y2, t2 = sim.run(T=100.0, save_every=100)
+# print(f"\nRésultat exemple 2 : shape X = {X2.shape}")
+# time = np.arange(0,X2.shape[0],1)
+
+# plt.plot(time,X2[:,0], 'gray',label='Mode 1',alpha=0.5)
+# plt.plot(time,X2[:,1], 'gray',label='Mode 2',alpha=0.5)
+# plt.plot(time,X2[:,2], 'gray',label='Mode 3',alpha=0.5)
+# plt.plot(time,X2[:,3], 'black',label='Mode 4 Forcing',alpha=1)
+# plt.plot(time,X2[:,5], 'gray',label='Mode 6',alpha=0.5)
+# plt.plot(time,X2[:,7], 'gray',label='Mode 8',alpha=0.5)
+# plt.plot(time,X2[:,9], 'gray',label='Mode 10',alpha=0.5)
+# plt.savefig(r"/home/s26calme/Documents/code_stage/KF/c_encapsulate")
 
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
@@ -208,6 +274,22 @@ def m(x_past):
     nu = 1.0e-7
     fs = 100
     time_end = 1.0e-2
+
+    X0 = x_past[0::2]
+    Y0 = x_past[1::2]
+
+    sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+   
+    Xc, Yc = sim.step() #sim.run(T=1.0, save_every=100)#
+    
+    
+
+    x_future = np.zeros_like(x_past)
+    x_future[0::2] = Xc
+    x_future[1::2] = Yc
+    return x_future
+
+    '''
     param = integration.GOYParams(force=force,N_force=4,
                           force_rnd=force_rnd,k0=k0,lmb=lmb,
                           eps=eps,nu=nu,N=22,dt=dT,fs=100,time=time_end)
@@ -231,7 +313,7 @@ def m(x_past):
 
     x_future[0::2,1] = X
     x_future[1::2,1] = Y
-
+    '''
     # x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
     # x_future_r = np.zeros(n)
     # x_future_i = np.zeros(n)
@@ -247,6 +329,23 @@ def m(x_past):
     #     x_future[2*i,1] = x_future_r[i]
     #     x_future[2*i+1,1] = x_future_i[i]
     
+    #return x_future
+
+def m_bis(x_past, n_steps=1):
+    X_in  = np.ascontiguousarray(x_past[0::2], dtype=np.float64)
+    Y_in  = np.ascontiguousarray(x_past[1::2], dtype=np.float64)
+    X_out = np.zeros(N, dtype=np.float64)
+    Y_out = np.zeros(N, dtype=np.float64)
+
+    lib.step_n(X_in.ctypes.data_as(_ptr),
+               Y_in.ctypes.data_as(_ptr),
+               X_out.ctypes.data_as(_ptr),
+               Y_out.ctypes.data_as(_ptr),
+               ctypes.c_int(n_steps))
+
+    x_future = np.zeros_like(x_past)
+    x_future[0::2] = X_out
+    x_future[1::2] = Y_out
     return x_future
 
 nu = 1.0e-7
@@ -257,20 +356,27 @@ x_p_r,x_p_i = NL(x_past[0::2,0],x_past[1::2,0])
 x_past[0::2,1] = np.exp(-nu*K**2*1.0e-5)*(x_past[0::2,0] + 1.0e-5*x_p_r ) #np.random.normal(0,1.e-4,size=((n,2))) # state at time t-1 and t-2 for the model m
 x_past[1::2,1] = np.exp(-nu*K**2*1.0e-5)*(x_past[1::2,0] + 1.0e-5*x_p_i ) #np.random.normal(0,1.e-4,size=((n,2))) # state at time t-1 and t-2 for the model m
 
-# series = np.zeros((n,100))
-# series[:,0] = x_past[:,0]
-# series[:,1] = x_past[:,1]
+series = np.zeros((n,9999))
+series[:,0] = x_past[:,0]
+series[:,1] = x_past[:,1]
 
-# for i in range(2,100):
+for i in range(2,9999):
+    update = m_bis(series[:,i-1],n_steps=1000)
+    series[:,i] = update
 #     a = series[:,i-2:i]
 #     update = m(series[:,i-2:i])
 #     series[:,i] = update[:,1]
 #     #x_past = update
+base = np.zeros_like(series)
+base[0::2,:] = X1.T
+base[1::2,:] = Y1.T
 
-# plt.figure()
-# for i in range(10):
-#     plt.plot(series[2*i,:])
-# plt.savefig("test")
+Rmse = np.sqrt(np.mean(base-series)**2)
+plt.figure()
+
+for i in range(10):
+     plt.plot(series[2*i,:])
+plt.savefig("test")
 
 ### Generate observations and covariance
 def generate_observations(p, H):
