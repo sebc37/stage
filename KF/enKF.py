@@ -5,14 +5,15 @@ import matplotlib.pyplot as plt
 import tqdm
 
 sim = s.ShellModel()
-mes_sh = np.array([ 0.125*2.0**i for i in range(sim.N)])
-sim.set_sh(mes_sh)
-X0 = np.array([sim.sh[i]**(-1/3) 
-                   for i in range(sim.N)])
-#X0 *= (1 + 0.1*np.random.randn(sim.N))
-Y0 = np.zeros(sim.N) + 1.0e-4
+# mes_sh = np.array([ 0.125*2.0**i for i in range(sim.N)])
+# sim.set_sh(mes_sh)
+# X0 = np.array([sim.sh[i]**(-1/3) 
+#                    for i in range(sim.N)])
+# #X0 *= (1 + 0.1*np.random.randn(sim.N))
+# Y0 = np.zeros(sim.N) + 1.0e-4
 
-sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+# sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+sim.init_default()
 X2, Y2, t2 = sim.run(T=100.0, save_every=100)
 print(f"\nRésultat exemple 2 : shape X = {X2.shape}")
 time = np.arange(0,X2.shape[0],1)
