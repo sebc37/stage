@@ -1,33 +1,11 @@
 import numpy as np
-#import integration
-import simulation as s
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import tqdm
-import ctypes
-
-lib = ctypes.CDLL("/home/s26calme/Documents/code_stage/KF/enkf_lib.so")
-
-_ptr = ctypes.POINTER(ctypes.c_double)
-
-lib.step_n.restype  = None
-lib.step_n.argtypes = [_ptr, _ptr, _ptr, _ptr, ctypes.c_int]
-lib.reset.restype   = None
-lib.get_N.restype   = ctypes.c_int
-
-N = lib.get_N()
-
-
-sim = s.ShellModel()
+from goy import GoyModel
 
 
 
-# sim = s.ShellModel()
-
-# --- Run 1 : init_default ---
-sim.init_default()
-sh = sim.sh.copy()
-X1, Y1, t = sim.run(T=10.0, save_every=100)
 
 # # --- Run 2 : init_custom avec les mêmes CI ---
 # X0 = sh**(-1/3)
@@ -39,43 +17,43 @@ X1, Y1, t = sim.run(T=10.0, save_every=100)
 # print("Max diff X :", np.max(np.abs(X1 - X2)))
 # print("Max diff Y :", np.max(np.abs(Y1 - Y2)))
 
-def plot_im_xy(X,Y,t):
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+# def plot_im_xy(X,Y,t):
+#     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    # --- X ---
-    im1 = axes[0].imshow(np.abs(X).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
-                        extent=[t[0], t[-1], 0, sim.N-1],
-                        )
-    axes[0].set_xlabel("Temps")
-    axes[0].set_ylabel("Shell n°")
-    axes[0].set_title("X (partie réelle)")
-    plt.colorbar(im1, ax=axes[0], label="Amplitude")
+#     # --- X ---
+#     im1 = axes[0].imshow(np.abs(X).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
+#                         extent=[t[0], t[-1], 0, sim.N-1],
+#                         )
+#     axes[0].set_xlabel("Temps")
+#     axes[0].set_ylabel("Shell n°")
+#     axes[0].set_title("X (partie réelle)")
+#     plt.colorbar(im1, ax=axes[0], label="Amplitude")
 
-    # --- Y ---
-    im2 = axes[1].imshow(np.abs(Y).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
-                        extent=[t[0], t[-1], 0, sim.N-1],
-                        )
-    axes[1].set_xlabel("Temps")
-    axes[1].set_ylabel("Shell n°")
-    axes[1].set_title("Y (partie imaginaire)")
-    plt.colorbar(im2, ax=axes[1], label="Amplitude")
+#     # --- Y ---
+#     im2 = axes[1].imshow(np.abs(Y).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
+#                         extent=[t[0], t[-1], 0, sim.N-1],
+#                         )
+#     axes[1].set_xlabel("Temps")
+#     axes[1].set_ylabel("Shell n°")
+#     axes[1].set_title("Y (partie imaginaire)")
+#     plt.colorbar(im2, ax=axes[1], label="Amplitude")
 
-    plt.tight_layout()
-    plt.savefig("XY_intensite.png", dpi=150)
-    plt.show()
-    E = X**2 + Y**2   # shape (n_snapshots, N)
+#     plt.tight_layout()
+#     plt.savefig("XY_intensite.png", dpi=150)
+#     plt.show()
+#     E = X**2 + Y**2   # shape (n_snapshots, N)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    im = ax.imshow(E.T, aspect='auto', origin='lower',
-                extent=[t[0], t[-1], 0, sim.N-1],
-                norm=LogNorm(), cmap='inferno')
-    ax.set_xlabel("Temps")
-    ax.set_ylabel("Shell n°")
-    ax.set_title("Énergie par shell E(n,t) = X² + Y²")
-    plt.colorbar(im, ax=ax, label="Énergie")
-    plt.tight_layout()
-    plt.show()
-    plt.savefig("Energie.png", dpi=150)
+#     fig, ax = plt.subplots(figsize=(10, 5))
+#     im = ax.imshow(E.T, aspect='auto', origin='lower',
+#                 extent=[t[0], t[-1], 0, sim.N-1],
+#                 norm=LogNorm(), cmap='inferno')
+#     ax.set_xlabel("Temps")
+#     ax.set_ylabel("Shell n°")
+#     ax.set_title("Énergie par shell E(n,t) = X² + Y²")
+#     plt.colorbar(im, ax=ax, label="Énergie")
+#     plt.tight_layout()
+#     plt.show()
+#     plt.savefig("Energie.png", dpi=150)
 
 # plot_im_xy(X2,Y2)
 
@@ -262,93 +240,119 @@ def NL(x_past_real,x_past_imag):
 
     return NL_re, NL_im
 
-def m(x_past):
+# def m(x_past):
 
-    dT = 1.0e-5
-    eps = 0.5
-    lmb = 2.0
-    force = 0.005
-    force_rnd = True
-    k0 = 0.125
-    N = 22
-    nu = 1.0e-7
-    fs = 100
-    time_end = 1.0e-2
+#     dT = 1.0e-5
+#     eps = 0.5
+#     lmb = 2.0
+#     force = 0.005
+#     force_rnd = True
+#     k0 = 0.125
+#     N = 22
+#     nu = 1.0e-7
+#     fs = 100
+#     time_end = 1.0e-2
 
-    X0 = x_past[0::2]
-    Y0 = x_past[1::2]
+#     X0 = x_past[0::2]
+#     Y0 = x_past[1::2]
 
-    sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
+#     sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
    
-    Xc, Yc = sim.step() #sim.run(T=1.0, save_every=100)#
+#     Xc, Yc = sim.step() #sim.run(T=1.0, save_every=100)#
     
     
 
-    x_future = np.zeros_like(x_past)
-    x_future[0::2] = Xc
-    x_future[1::2] = Yc
-    return x_future
+#     x_future = np.zeros_like(x_past)
+#     x_future[0::2] = Xc
+#     x_future[1::2] = Yc
+#     return x_future
 
-    '''
-    param = integration.GOYParams(force=force,N_force=4,
-                          force_rnd=force_rnd,k0=k0,lmb=lmb,
-                          eps=eps,nu=nu,N=22,dt=dT,fs=100,time=time_end)
+#     '''
+#     param = integration.GOYParams(force=force,N_force=4,
+#                           force_rnd=force_rnd,k0=k0,lmb=lmb,
+#                           eps=eps,nu=nu,N=22,dt=dT,fs=100,time=time_end)
 
-    x_past_real = np.copy(x_past[0::2,0]) # Reels
-    x_past_imag = np.copy(x_past[1::2,0]) # Imaginaires
+#     x_past_real = np.copy(x_past[0::2,0]) # Reels
+#     x_past_imag = np.copy(x_past[1::2,0]) # Imaginaires
 
-    x_future_real = np.copy(x_past[0::2,1]) # Un Reels
-    x_future_imag = np.copy(x_past[1::2,1]) # Un Imagin
-    integrate = integration.GOYShellModel(params=param,Xpp=x_past_real,Ypp=x_past_imag,Xp=x_future_real,Yp=x_future_imag)
-    X,Y = integrate.run()
-    # n = np.shape(x_past_real)[0]
+#     x_future_real = np.copy(x_past[0::2,1]) # Un Reels
+#     x_future_imag = np.copy(x_past[1::2,1]) # Un Imagin
+#     integrate = integration.GOYShellModel(params=param,Xpp=x_past_real,Ypp=x_past_imag,Xp=x_future_real,Yp=x_future_imag)
+#     X,Y = integrate.run()
+#     # n = np.shape(x_past_real)[0]
 
-    # NL_re_pp, NL_im_pp = NL(x_past_real,x_past_imag)
-    # NL_re_p, NL_im_p = NL(x_future_real,x_future_imag)
+#     # NL_re_pp, NL_im_pp = NL(x_past_real,x_past_imag)
+#     # NL_re_p, NL_im_p = NL(x_future_real,x_future_imag)
     
-    x_future = np.zeros((n,2))
+#     x_future = np.zeros((n,2))
 
-    x_future[0::2,0] = x_past[0::2,1]
-    x_future[1::2,0] = x_past[1::2,1]
+#     x_future[0::2,0] = x_past[0::2,1]
+#     x_future[1::2,0] = x_past[1::2,1]
 
-    x_future[0::2,1] = X
-    x_future[1::2,1] = Y
-    '''
-    # x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
-    # x_future_r = np.zeros(n)
-    # x_future_i = np.zeros(n)
-    # for i in range(n):
-    #     if i!=3:
-    #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i]))
-    #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i]))
+#     x_future[0::2,1] = X
+#     x_future[1::2,1] = Y
+#     '''
+#     # x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
+#     # x_future_r = np.zeros(n)
+#     # x_future_i = np.zeros(n)
+#     # for i in range(n):
+#     #     if i!=3:
+#     #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i]))
+#     #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i]))
 
-    #     else:
-    #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i])) + 0.005*dT*np.random.normal(0,1) # on ajoute du bruit pour le mode 4
-    #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i])) + 0.005*dT*np.random.normal(0,1) # x1(t+1) = x1(t) + x1_dot(t)
+#     #     else:
+#     #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i])) + 0.005*dT*np.random.normal(0,1) # on ajoute du bruit pour le mode 4
+#     #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i])) + 0.005*dT*np.random.normal(0,1) # x1(t+1) = x1(t) + x1_dot(t)
         
-    #     x_future[2*i,1] = x_future_r[i]
-    #     x_future[2*i+1,1] = x_future_i[i]
+#     #     x_future[2*i,1] = x_future_r[i]
+#     #     x_future[2*i+1,1] = x_future_i[i]
     
-    #return x_future
+#     #return x_future
 
-def m_bis(x_past, n_steps=1):
-    X_in  = np.ascontiguousarray(x_past[0::2], dtype=np.float64)
-    Y_in  = np.ascontiguousarray(x_past[1::2], dtype=np.float64)
-    X_out = np.zeros(N, dtype=np.float64)
-    Y_out = np.zeros(N, dtype=np.float64)
+# def m_bis(x_past, n_steps=1):
+#     X_in  = np.ascontiguousarray(x_past[0::2], dtype=np.float64)
+#     Y_in  = np.ascontiguousarray(x_past[1::2], dtype=np.float64)
+#     X_out = np.zeros(N, dtype=np.float64)
+#     Y_out = np.zeros(N, dtype=np.float64)
 
-    lib.step_n(X_in.ctypes.data_as(_ptr),
-               Y_in.ctypes.data_as(_ptr),
-               X_out.ctypes.data_as(_ptr),
-               Y_out.ctypes.data_as(_ptr),
-               ctypes.c_int(n_steps))
+#     lib.step_n(X_in.ctypes.data_as(_ptr),
+#                Y_in.ctypes.data_as(_ptr),
+#                X_out.ctypes.data_as(_ptr),
+#                Y_out.ctypes.data_as(_ptr),
+#                ctypes.c_int(n_steps))
+
+#     x_future = np.zeros_like(x_past)
+#     x_future[0::2] = X_out
+#     x_future[1::2] = Y_out
+#     return x_future
+
+DT        = 1e-5
+FS        = 100.
+FORCE     = 0.005
+N_FORCE   = 4
+FORCE_RND = 0
+model = GoyModel(dt=DT, force=FORCE, N_force=N_FORCE, force_rnd=FORCE_RND)
+N = model.N  # 22
+
+def m(x_past):
+        # ── parametres (identiques a parameters.h) ────────────────────────────────────
+    
+    
+    N_fs         = int(1.0 / DT / FS)      # 999
+    cur_Xpp,cur_Ypp = x_past[0,0::2],x_past[0,1::2]
+    cur_Xp,cur_Yp = x_past[1,0::2],x_past[1,1::2]
+  
+    # if i % 10000 == 0:
+    #     print(f"  ligne {i}/{N_rows} ...")
+    (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
+        cur_Xpp, cur_Ypp, cur_Xp, cur_Yp, n_steps=N_fs)
+    
 
     x_future = np.zeros_like(x_past)
-    x_future[0::2] = X_out
-    x_future[1::2] = Y_out
+    x_future[0,0::2],x_future[0,1::2] = cur_Xpp,cur_Ypp
+    x_future[1,0::2],x_future[1,1::2] = cur_Xp,cur_Yp
     return x_future
-
-nu = 1.0e-7
+# nu = 1.0e-7
 x_past = np.zeros((n,2))
 x_past[0::2,0] = K**(-1./3) #[0:int(n/2)]
 x_past[1::2,0] = 1e-4 

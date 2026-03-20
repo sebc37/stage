@@ -84,7 +84,7 @@ void save_data(double *my_X, double *my_Y)
 
     sprintf(filename, "%s/%s", DATA_DIR, DATA_FILE);
     file = fopen(filename, "a");
-    for (i=0; i<N; i++) fprintf(file, "%g %g ", my_X[i], my_Y[i]);
+    for (i=0; i<N; i++) fprintf(file, "%.15g %.15g ", my_X[i], my_Y[i]);
     fprintf(file, "\n");
     fclose(file);
 }
@@ -98,6 +98,6 @@ void save_reconstructed(double *my_X, double *my_Y, double t)
     for (i=0; i<N; i++) v += my_X[i]*cos(sh[i]*t) - my_Y[i]*sin(sh[i]*t);
     sprintf(filename, "%s/%s", DATA_DIR, RECONSTRUCTED_FILE);
     file = fopen(filename, "a");
-    fprintf(file, "%g \n", v);
+    fprintf(file, "%.15g \n", v);
     fclose(file);
 }
