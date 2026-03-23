@@ -138,7 +138,7 @@ def reduced_center(X,mean,std):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test.dat"
+path_data = PATH + "data_test_precis.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
@@ -160,7 +160,7 @@ k0 = 0.125
 lmb = 2.0
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc= filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
-Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
+#Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
 Data_filtered = reduced_center(Data_filtered,mean=mean,std=Std_mode) # données réelles
 
 K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
@@ -325,67 +325,104 @@ def NL(x_past_real,x_past_imag):
 #     x_future[0::2] = X_out
 #     x_future[1::2] = Y_out
 #     return x_future
-
+TIME      = 1000.
 DT        = 1e-5
 FS        = 100.
 FORCE     = 0.005
 N_FORCE   = 4
 FORCE_RND = 0
+N_fs      = int(1.0 / DT / FS)  
 model = GoyModel(dt=DT, force=FORCE, N_force=N_FORCE, force_rnd=FORCE_RND)
 N = model.N  # 22
+nu =1.0e-7
 
-def m(x_past):
-        # ── parametres (identiques a parameters.h) ────────────────────────────────────
-    
-    
-    N_fs         = int(1.0 / DT / FS)      # 999
-    cur_Xpp,cur_Ypp = x_past[0,0::2],x_past[0,1::2]
-    cur_Xp,cur_Yp = x_past[1,0::2],x_past[1,1::2]
-  
-    # if i % 10000 == 0:
-    #     print(f"  ligne {i}/{N_rows} ...")
-    (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
-        cur_Xpp, cur_Ypp, cur_Xp, cur_Yp, n_steps=N_fs)
-    
 
-    x_future = np.zeros_like(x_past)
-    x_future[0,0::2],x_future[0,1::2] = cur_Xpp,cur_Ypp
-    x_future[1,0::2],x_future[1,1::2] = cur_Xp,cur_Yp
-    return x_future
-# nu = 1.0e-7
-x_past = np.zeros((n,2))
-x_past[0::2,0] = K**(-1./3) #[0:int(n/2)]
-x_past[1::2,0] = 1e-4 
-x_p_r,x_p_i = NL(x_past[0::2,0],x_past[1::2,0])
-x_past[0::2,1] = np.exp(-nu*K**2*1.0e-5)*(x_past[0::2,0] + 1.0e-5*x_p_r ) #np.random.normal(0,1.e-4,size=((n,2))) # state at time t-1 and t-2 for the model m
-x_past[1::2,1] = np.exp(-nu*K**2*1.0e-5)*(x_past[1::2,0] + 1.0e-5*x_p_i ) #np.random.normal(0,1.e-4,size=((n,2))) # state at time t-1 and t-2 for the model m
 
-series = np.zeros((n,9999))
-series[:,0] = x_past[:,0]
-series[:,1] = x_past[:,1]
+def m_b(x_past,N_fs,n_steps_first,start=False,second = False):
+    # ── choix du point de départ ──────────────────────────────────────────────────
+    #i      = 10000   # ligne du fichier depuis laquelle on repart
+     # nombre de lignes suivantes à reproduire
 
-update = m_bis(series[:,1],n_steps=997)
-series[:,2] = update
-for i in range(3,9999):
-    update = m_bis(series[:,i-1],n_steps=999)
-    series[:,i] = update
+     # pas entre deux lignes du fichier
+     # pas spéciaux pour la ligne 0 (voir run_goy.py)
+
+    # ── reconstruction de Xpp (état à t_i - dt) ──────────────────────────────────
+    # On part de la ligne i-1 et on intègre 998 pas → on arrive à t_i - dt
+    if start:
+        # cas particulier : ligne 0, on repart des CI
+        Xpp0, Ypp0, Xp0, Yp0 = model.init_fields()
+        (Xpp, Ypp), (Xp, Yp) = model.integrate(Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first - 1)
+    else:
+        # ligne i-1 → intègre N_fs-1 pas → arrive à t_i - dt
+        if second:
+            Xpp0, Ypp0, Xp0, Yp0 = model.init_fields()
+            (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
+                Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first)
+        else:
+            Xp_prev2 = x_past[0, 0::2];  Yp_prev2 = x_past[0, 1::2]
+            Xp_prev1 = x_past[1, 0::2];  Yp_prev1 = x_past[1, 1::2]
+            (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
+                Xp_prev2, Yp_prev2, Xp_prev1, Yp_prev1, n_steps=N_fs - 1)
+
+        (Xpp, Ypp), (Xp, Yp) = model.integrate(
+            cur_Xpp, cur_Ypp, cur_Xp, cur_Yp, n_steps=1)
+        # maintenant Xp/Yp = ref[i] à la précision machine, Xpp/Ypp = état à t_i - dt
+    return Xpp,Ypp,Xp,Yp
+
+j_ = 50
+nb_iter = 500
+count_init   = int(TIME / DT)  
+n_steps_first = count_init % N_fs  
+series = np.zeros((n,nb_iter)).T
+series[0,:] = Data_shell[j_,:]
+series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
+
+
+
+for k in range(2,nb_iter):
+    x_past = series[k-2:k,:].copy()
+    # print("#########début##########")
+    # print("x_past :",x_past[:,0:2])
+    # print("------------------------")
+    # print("Data_shell :",Data_shell[j_+k-1,0:2])
+    # print("------------------------")
+    # print("serie k-2:",series[k-2,0:2])
+    # print("serie k-1:",series[k-1,0:2])
+    # print("------------------------")
+
+    _,_,cur_Xp,cur_Yp = m_b(x_past,N_fs=999,n_steps_first=100)
+    series[k, 0::2] = cur_Xp.copy()
+    series[k, 1::2] = cur_Yp.copy()
+    # print("serie:",series[k,0:2])
+    # print("#########fin###########")
+# x_past = np.copy(Data_shell[0:2,:]) 
+# for i in range(nb_iter):
+#     x_past = m(x_past)
+#     series[i,:] = x_past[1,:]
+
+    # x_past = update
 #     a = series[:,i-2:i]
 #     update = m(series[:,i-2:i])
 #     series[:,i] = update[:,1]
 #     #x_past = update
-base = np.zeros_like(series)
-base[0::2,:] = X1.T
-base[1::2,:] = Y1.T
-data = data.T
-Rmse = np.sqrt(np.mean(data[:,0:9999]-series)**2)
+
+# base = np.zeros_like(series)
+# base[0::2,:] = X1.T
+# base[1::2,:] = Y1.T
+# data = data.T
+Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
 
 plt.figure()
 
-for i in range(10):
-     plt.plot(np.abs(series[2*i,:]-data[2*i,0:9999]))
+for i in range(5):
+     #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
+     plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}")
+     plt.plot(Data_shell[j_:j_+nb_iter,2*i],label=f"shell_reel_{2*i}")
+     plt.legend()
+     plt.show()
 plt.savefig("test")
 
-
+'''
 plt.figure()
 for i in range(10):
      plt.plot(np.abs(base[2*i,:]-data[2*i,0:9999]))
@@ -476,3 +513,4 @@ plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
 print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
 print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
+'''

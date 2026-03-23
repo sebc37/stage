@@ -128,7 +128,7 @@ class GoyModel:
 
     # ── main API ──────────────────────────────────────────────────────────────
 
-    def init_fields(self) -> tuple:
+    def init_fields(self,Xpp=None,Ypp=None) -> tuple:
         """
         Compute the two-step initial condition (Xpp, Ypp, Xp, Yp) exactly as
         the original init_fields() does:
@@ -143,8 +143,11 @@ class GoyModel:
         """
         import numpy as _np
         sh = self._sh
-        Xpp = sh ** (-1.0 / 3.0)
-        Ypp = _np.full(self.N, 1e-4,dtype=np.float64)
+        
+        if type(Xpp)==type(None) and type(Ypp)==type(None):
+            Xpp = sh ** (-1.0 / 3.0)
+            Ypp = _np.full(self.N, 1e-4,dtype=np.float64)
+        
 
         # need A[] – recompute here (stored in C side, replicate in Python)
         A = _np.exp(-self._nu * sh**2 * self.dt)

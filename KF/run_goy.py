@@ -20,7 +20,7 @@ FORCE     = 0.005
 N_FORCE   = 4
 FORCE_RND = 0
 
-REF_FILE  = "/home/s26calme/Documents/code_stage/GOY-main/data_100.dat"
+REF_FILE  = "/home/s26calme/Documents/code_stage/GOY-main/data_test.dat"
 
 # ── replication exacte des calculs entiers du code C ─────────────────────────
 count_init   = int(TIME / DT)           # 99999999
