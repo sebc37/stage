@@ -138,7 +138,7 @@ def reduced_center(X,mean,std):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test_precis.dat"
+path_data = PATH + "data_test.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
@@ -161,11 +161,12 @@ lmb = 2.0
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc= filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,0.001,123456)
 #Data_shell = reduced_center(Data_shell,mean=mean,std=Std_mode)
-Data_filtered = reduced_center(Data_filtered,mean=mean,std=Std_mode) # données réelles
+#Data_filtered = reduced_center(Data_filtered,mean=mean,std=Std_mode) # données réelles
 
 K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 
 y_obs = Data_filtered.T + np.random.normal(0,1,size=(44,90090)) #noisy observations
+
 
 
 # for i in range(np.shape(y_obs)[0]):
@@ -338,7 +339,7 @@ nu =1.0e-7
 
 
 
-def m_b(x_past,N_fs,n_steps_first,start=False,second = False):
+def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
     # ── choix du point de départ ──────────────────────────────────────────────────
     #i      = 10000   # ligne du fichier depuis laquelle on repart
      # nombre de lignes suivantes à reproduire
@@ -354,6 +355,10 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False):
         (Xpp, Ypp), (Xp, Yp) = model.integrate(Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first - 1)
     else:
         # ligne i-1 → intègre N_fs-1 pas → arrive à t_i - dt
+        if custom:
+            Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2])
+            (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
+                Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first)
         if second:
             Xpp0, Ypp0, Xp0, Yp0 = model.init_fields()
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
@@ -381,52 +386,29 @@ series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
 
 for k in range(2,nb_iter):
     x_past = series[k-2:k,:].copy()
-    # print("#########début##########")
-    # print("x_past :",x_past[:,0:2])
-    # print("------------------------")
-    # print("Data_shell :",Data_shell[j_+k-1,0:2])
-    # print("------------------------")
-    # print("serie k-2:",series[k-2,0:2])
-    # print("serie k-1:",series[k-1,0:2])
-    # print("------------------------")
-
+    
     _,_,cur_Xp,cur_Yp = m_b(x_past,N_fs=999,n_steps_first=100)
     series[k, 0::2] = cur_Xp.copy()
     series[k, 1::2] = cur_Yp.copy()
     # print("serie:",series[k,0:2])
-    # print("#########fin###########")
-# x_past = np.copy(Data_shell[0:2,:]) 
-# for i in range(nb_iter):
-#     x_past = m(x_past)
-#     series[i,:] = x_past[1,:]
 
-    # x_past = update
-#     a = series[:,i-2:i]
-#     update = m(series[:,i-2:i])
-#     series[:,i] = update[:,1]
-#     #x_past = update
-
-# base = np.zeros_like(series)
-# base[0::2,:] = X1.T
-# base[1::2,:] = Y1.T
-# data = data.T
 Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
 
 plt.figure()
 
-for i in range(5):
-     #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
-     plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}")
-     plt.plot(Data_shell[j_:j_+nb_iter,2*i],label=f"shell_reel_{2*i}")
-     plt.legend()
-     plt.show()
-plt.savefig("test")
+# for i in range(5):
+#      #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
+#      plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}")
+#      plt.plot(Data_shell[j_:j_+nb_iter,2*i],label=f"shell_reel_{2*i}")
+#      plt.legend()
+#      plt.show()
+# plt.savefig("test")
 
-'''
-plt.figure()
-for i in range(10):
-     plt.plot(np.abs(base[2*i,:]-data[2*i,0:9999]))
-plt.savefig("test_2")
+
+# plt.figure()
+# for i in range(10):
+#      plt.plot(np.abs(base[2*i,:]-data[2*i,0:9999]))
+# plt.savefig("test_2")
 
 ### Generate observations and covariance
 def generate_observations(p, H):
@@ -448,24 +430,23 @@ x_a_enkf = np.zeros((n,nb))   # analysed state
 P_a_enkf = np.zeros((n,n,nb)) # analysed error covariance matrix
 
 ### Ensemble Kalman filter
-x_a_enkf_tmp = np.zeros((n,Ne,2)) 
+x_a_enkf_tmp = np.zeros((n,2,Ne)) # shell,t-2 t-1, Ne
 x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
-for j in range(2):
-    for i in range(Ne):
-        x_a_enkf_tmp[:,i,j] = np.random.multivariate_normal(x_0, P_0)
 
-x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp[:,:,1],1) # initial state
-P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp[:,:,1])    # initial state covariance
+for i in range(Ne):
+    x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
+
+x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
+P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
 
 for k in tqdm.tqdm(range(nb)): # forward in time
     # prediction step
-
+    # il faut un initialisation custom pour chaque Ne
     for i in range(Ne):
-        a = x_a_enkf_tmp[:,i,0]
-        b = x_a_enkf_tmp[:,i,1]
-        x_f_enkf_tmp[:,i] = m(np.column_stack((x_a_enkf_tmp[:,i,0],x_a_enkf_tmp[:,i,1])))[:,1] + np.random.multivariate_normal(np.zeros(n), Q) ### A CACHER
+
+        x_f_enkf_tmp[:,i] = m_b(x_a_enkf_tmp[:,i])[:,1] + np.random.multivariate_normal(np.zeros(n), Q) ### A CACHER
         y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
     
     P_f_enkf_tmp = np.cov(x_f_enkf_tmp) ### A CACHER
@@ -513,4 +494,3 @@ plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
 print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
 print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
-'''
