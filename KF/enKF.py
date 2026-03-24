@@ -165,9 +165,9 @@ Data_filtered, Data_train, mean, Var_mode, Std_mode, perc= filter_mode(Data_shel
 
 K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 
-y_obs = Data_filtered.T + np.random.normal(0,1,size=(44,90090)) #noisy observations
+y_obs = Data_filtered.T + np.random.normal(0,1.0e-4,size=(44,90090)) #noisy observations
 
-
+y_obs = y_obs[2*k_min_collocation:2*k_max_collocation,:]
 
 # for i in range(np.shape(y_obs)[0]):
 #     plt.figure()
