@@ -137,9 +137,9 @@ def reduced_center(X,mean,std):
 
 
 
-PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test.dat"
-SAVE = "/home/s26calme/Documents/code_stage/KF"
+PATH = "/home/seb/Documents/stage/GOY-main/"
+path_data = PATH + "data.dat"
+SAVE = "/home/seb/Documents/stage/KF"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
@@ -356,9 +356,10 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
     else:
         # ligne i-1 → intègre N_fs-1 pas → arrive à t_i - dt
         if custom:
-            Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2])
+            Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0::2],Ypp=x_past[1::2])
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
                 Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first)
+            return cur_Xpp,cur_Xp,cur_Ypp,cur_Yp
         if second:
             Xpp0, Ypp0, Xp0, Yp0 = model.init_fields()
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
@@ -430,7 +431,7 @@ x_a_enkf = np.zeros((n,nb))   # analysed state
 P_a_enkf = np.zeros((n,n,nb)) # analysed error covariance matrix
 
 ### Ensemble Kalman filter
-x_a_enkf_tmp = np.zeros((n,2,Ne)) # shell,t-2 t-1, Ne
+x_a_enkf_tmp = np.zeros((n,Ne)) # shell,t-2 t-1, Ne
 x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
@@ -445,8 +446,9 @@ for k in tqdm.tqdm(range(nb)): # forward in time
     # prediction step
     # il faut un initialisation custom pour chaque Ne
     for i in range(Ne):
-
-        x_f_enkf_tmp[:,i] = m_b(x_a_enkf_tmp[:,i])[:,1] + np.random.multivariate_normal(np.zeros(n), Q) ### A CACHER
+        _,_,forward_x,forward_y  = m_b(x_a_enkf_tmp[:,i].T,N_fs=999,n_steps_first=998,custom=True)
+        x_f_enkf_tmp[0::2,i],x_f_enkf_tmp[1::2,i] = forward_x.T,forward_y.T ### A CACHER
+        x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)
         y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
     
     P_f_enkf_tmp = np.cov(x_f_enkf_tmp) ### A CACHER
@@ -456,16 +458,16 @@ for k in tqdm.tqdm(range(nb)): # forward in time
     # update step
     if(sum(np.isfinite(y_obs[:,k]))>0):
         for i in range(Ne):
-            x_a_enkf_tmp[:,:,1] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
+            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
     else:
-            x_a_enkf_tmp[:,:,0] = x_a_enkf_tmp[:,:,1]
-            x_a_enkf_tmp[:,:,1] = x_f_enkf_tmp
+            #x_a_enkf_tmp[:,:,0] = x_a_enkf_tmp[:,:,1]
+            x_a_enkf_tmp = x_f_enkf_tmp
             P_a_enkf_tmp = P_f_enkf_tmp 
     # store results
     x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
     P_f_enkf[:,:,k] = P_f_enkf_tmp
-    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp[:,:,1],1)
+    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1)
     P_a_enkf[:,:,k] = P_a_enkf_tmp
 
 
