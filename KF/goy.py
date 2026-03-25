@@ -188,6 +188,10 @@ class GoyModel:
         NYpp = _NY(Xpp, Ypp)
         Xp = A * (Xpp + self.dt * NXpp)
         Yp = A * (Ypp + self.dt * NYpp)
+        # print(f"Xpp0 : {Xpp}")
+        # print(f"Ypp0 : {Ypp}")
+        # print(f"Xp : {Xp}")
+        # print(f"Yp : {Yp}")
         return Xpp, Ypp, Xp, Yp
 
     def integrate(self,

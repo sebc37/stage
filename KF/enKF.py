@@ -6,62 +6,6 @@ from goy import GoyModel
 
 
 
-
-# # --- Run 2 : init_custom avec les mêmes CI ---
-# X0 = sh**(-1/3)
-# Y0 = np.ones(sim.N) * 1e-4
-# sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
-# X2, Y2, t = sim.run(T=1.0, save_every=100)
-
-# Comparaison
-# print("Max diff X :", np.max(np.abs(X1 - X2)))
-# print("Max diff Y :", np.max(np.abs(Y1 - Y2)))
-
-# def plot_im_xy(X,Y,t):
-#     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-#     # --- X ---
-#     im1 = axes[0].imshow(np.abs(X).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
-#                         extent=[t[0], t[-1], 0, sim.N-1],
-#                         )
-#     axes[0].set_xlabel("Temps")
-#     axes[0].set_ylabel("Shell n°")
-#     axes[0].set_title("X (partie réelle)")
-#     plt.colorbar(im1, ax=axes[0], label="Amplitude")
-
-#     # --- Y ---
-#     im2 = axes[1].imshow(np.abs(Y).T , norm=LogNorm(), cmap='inferno', aspect='auto', origin='lower',
-#                         extent=[t[0], t[-1], 0, sim.N-1],
-#                         )
-#     axes[1].set_xlabel("Temps")
-#     axes[1].set_ylabel("Shell n°")
-#     axes[1].set_title("Y (partie imaginaire)")
-#     plt.colorbar(im2, ax=axes[1], label="Amplitude")
-
-#     plt.tight_layout()
-#     plt.savefig("XY_intensite.png", dpi=150)
-#     plt.show()
-#     E = X**2 + Y**2   # shape (n_snapshots, N)
-
-#     fig, ax = plt.subplots(figsize=(10, 5))
-#     im = ax.imshow(E.T, aspect='auto', origin='lower',
-#                 extent=[t[0], t[-1], 0, sim.N-1],
-#                 norm=LogNorm(), cmap='inferno')
-#     ax.set_xlabel("Temps")
-#     ax.set_ylabel("Shell n°")
-#     ax.set_title("Énergie par shell E(n,t) = X² + Y²")
-#     plt.colorbar(im, ax=ax, label="Énergie")
-#     plt.tight_layout()
-#     plt.show()
-#     plt.savefig("Energie.png", dpi=150)
-
-# plot_im_xy(X2,Y2)
-
-# sim.init_default()
-# X2, Y2, t2 = sim.run(T=100.0, save_every=100)
-# print(f"\nRésultat exemple 2 : shape X = {X2.shape}")
-# time = np.arange(0,X2.shape[0],1)
-
 # plt.plot(time,X2[:,0], 'gray',label='Mode 1',alpha=0.5)
 # plt.plot(time,X2[:,1], 'gray',label='Mode 2',alpha=0.5)
 # plt.plot(time,X2[:,2], 'gray',label='Mode 3',alpha=0.5)
@@ -96,7 +40,7 @@ def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
                 X_filtered[i,j] =  X_subset[i,j] #+ np.random.normal(0,1) 
                 X_posx.append(j)
                 X_posy.append(i)
-                X_value.append( (X_subset[i,j]-mean_mode[j])/std_mode[j]) # centré réduit
+                X_value.append(X_subset[i,j])#-mean_mode[j])/std_mode[j]) # centré réduit
 
             else:
                 X_filtered[i,j] = None
@@ -137,9 +81,9 @@ def reduced_center(X,mean,std):
 
 
 
-PATH = "/home/seb/Documents/stage/GOY-main/"
-path_data = PATH + "data.dat"
-SAVE = "/home/seb/Documents/stage/KF"
+PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
+path_data = PATH + "data_test.dat"
+SAVE = "/home/s26calme/Documents/code_stage/KF/"
 
 data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
@@ -174,8 +118,8 @@ y_obs = y_obs[2*k_min_collocation:2*k_max_collocation,:]
 #     plt.plot(y_obs[i,:],'*')
 #     plt.plot(Data_shell[:,i],'gray',alpha=0.5)
 #     plt.savefig(PATH + "ploty",dpi=300)
-
-
+shell_array = np.array(Data_shell)
+MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2) for k in range(44)])
 
 
 ### parameters
@@ -183,15 +127,24 @@ n     = 44 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
-var_Q = 0.01 # error variance of the model (in Kalman)
+var_Q = 1.0e-12 # error variance of the model (in Kalman)
 var_R = 0.1 # error variance of the observations (in Kalman)
-x_0   = np.zeros((n)) # initial coundition (mean)
-P_0   = np.eye(n,n)*1.e-4 # initial coundition (covariance)
+x_0   = (np.zeros((n))+ mean)*1.0e-12 # initial coundition (mean)
+P_0   = np.eye(n,n)*1.e-12 # initial coundition (covariance)
+
 
 ### variables
-Q      = var_Q*np.eye(n,n)
-R      = var_R*np.eye(p,p)
 
+m = MS[2*4:2*10]
+R = np.eye(p,p)
+Q      = var_Q*np.eye(n,n)
+for i in range(p):
+    for j in range(p):
+        if i==j:
+            R[i,j] = m[i]
+#R      = np.fill_diagonal(R,list(m[:]))#var_R*np.eye(p,p)
+
+# R = (0.05**2)*
 
 # ### true state and noisy observations
 # x = c_[x1, x2, x1_dot, x2_dot].T # true state
@@ -241,91 +194,7 @@ def NL(x_past_real,x_past_imag):
 
     return NL_re, NL_im
 
-# def m(x_past):
 
-#     dT = 1.0e-5
-#     eps = 0.5
-#     lmb = 2.0
-#     force = 0.005
-#     force_rnd = True
-#     k0 = 0.125
-#     N = 22
-#     nu = 1.0e-7
-#     fs = 100
-#     time_end = 1.0e-2
-
-#     X0 = x_past[0::2]
-#     Y0 = x_past[1::2]
-
-#     sim.init_custom(X0, Y0, dt=1e-5, force=0.005, force_rnd=True)
-   
-#     Xc, Yc = sim.step() #sim.run(T=1.0, save_every=100)#
-    
-    
-
-#     x_future = np.zeros_like(x_past)
-#     x_future[0::2] = Xc
-#     x_future[1::2] = Yc
-#     return x_future
-
-#     '''
-#     param = integration.GOYParams(force=force,N_force=4,
-#                           force_rnd=force_rnd,k0=k0,lmb=lmb,
-#                           eps=eps,nu=nu,N=22,dt=dT,fs=100,time=time_end)
-
-#     x_past_real = np.copy(x_past[0::2,0]) # Reels
-#     x_past_imag = np.copy(x_past[1::2,0]) # Imaginaires
-
-#     x_future_real = np.copy(x_past[0::2,1]) # Un Reels
-#     x_future_imag = np.copy(x_past[1::2,1]) # Un Imagin
-#     integrate = integration.GOYShellModel(params=param,Xpp=x_past_real,Ypp=x_past_imag,Xp=x_future_real,Yp=x_future_imag)
-#     X,Y = integrate.run()
-#     # n = np.shape(x_past_real)[0]
-
-#     # NL_re_pp, NL_im_pp = NL(x_past_real,x_past_imag)
-#     # NL_re_p, NL_im_p = NL(x_future_real,x_future_imag)
-    
-#     x_future = np.zeros((n,2))
-
-#     x_future[0::2,0] = x_past[0::2,1]
-#     x_future[1::2,0] = x_past[1::2,1]
-
-#     x_future[0::2,1] = X
-#     x_future[1::2,1] = Y
-#     '''
-#     # x_future[:,0] = x_past[:,1] # x(t-1) => x(t)
-#     # x_future_r = np.zeros(n)
-#     # x_future_i = np.zeros(n)
-#     # for i in range(n):
-#     #     if i!=3:
-#     #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i]))
-#     #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i]))
-
-#     #     else:
-#     #         x_future_i[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_imag[i] + dT*((3/2)*NL_im_p[i] - (1/2)*NL_im_pp[i])) + 0.005*dT*np.random.normal(0,1) # on ajoute du bruit pour le mode 4
-#     #         x_future_r[i] = np.exp(-nu*(K[i]**2)*dT)*(x_future_real[i] + dT*((3/2)*NL_re_p[i] - (1/2)*NL_re_pp[i])) + 0.005*dT*np.random.normal(0,1) # x1(t+1) = x1(t) + x1_dot(t)
-        
-#     #     x_future[2*i,1] = x_future_r[i]
-#     #     x_future[2*i+1,1] = x_future_i[i]
-    
-#     #return x_future
-
-# def m_bis(x_past, n_steps=1):
-#     X_in  = np.ascontiguousarray(x_past[0::2], dtype=np.float64)
-#     Y_in  = np.ascontiguousarray(x_past[1::2], dtype=np.float64)
-#     X_out = np.zeros(N, dtype=np.float64)
-#     Y_out = np.zeros(N, dtype=np.float64)
-
-#     lib.step_n(X_in.ctypes.data_as(_ptr),
-#                Y_in.ctypes.data_as(_ptr),
-#                X_out.ctypes.data_as(_ptr),
-#                Y_out.ctypes.data_as(_ptr),
-#                ctypes.c_int(n_steps))
-
-#     x_future = np.zeros_like(x_past)
-#     x_future[0::2] = X_out
-#     x_future[1::2] = Y_out
-#     return x_future
 TIME      = 1000.
 DT        = 1e-5
 FS        = 100.
@@ -359,7 +228,7 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
             Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0::2],Ypp=x_past[1::2])
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
                 Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first)
-            return cur_Xpp,cur_Xp,cur_Ypp,cur_Yp
+            return cur_Xpp,cur_Ypp,cur_Xp,cur_Yp
         if second:
             Xpp0, Ypp0, Xp0, Yp0 = model.init_fields()
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
@@ -376,7 +245,7 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
     return Xpp,Ypp,Xp,Yp
 
 j_ = 50
-nb_iter = 500
+nb_iter = 3
 count_init   = int(TIME / DT)  
 n_steps_first = count_init % N_fs  
 series = np.zeros((n,nb_iter)).T
@@ -385,17 +254,17 @@ series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
 
 
 
-for k in range(2,nb_iter):
-    x_past = series[k-2:k,:].copy()
+# for k in range(2,nb_iter):
+#     x_past = series[k-1:k,:].copy()
     
-    _,_,cur_Xp,cur_Yp = m_b(x_past,N_fs=999,n_steps_first=100)
-    series[k, 0::2] = cur_Xp.copy()
-    series[k, 1::2] = cur_Yp.copy()
-    # print("serie:",series[k,0:2])
+#     _,_,cur_Xp,cur_Yp = m_b(x_past,N_fs=999,n_steps_first=99,custom=True)
+#     series[k, 0::2] = cur_Xp.copy()
+#     series[k, 1::2] = cur_Yp.copy()
+#     # print("serie:",series[k,0:2])
 
-Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
+# Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
 
-plt.figure()
+# plt.figure()
 
 # for i in range(5):
 #      #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
@@ -436,13 +305,15 @@ x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
 
+
+nb = 50
 for i in range(Ne):
     x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
 
 x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
 P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
 
-for k in tqdm.tqdm(range(nb)): # forward in time
+for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # prediction step
     # il faut un initialisation custom pour chaque Ne
     for i in range(Ne):
@@ -473,9 +344,9 @@ for k in tqdm.tqdm(range(nb)): # forward in time
 
 ### plot trajectories (true, observed, KF, EnKF)
 plt.figure()
-plt.plot(Data_shell.T[8,:], 'b', label='True state ($x$)')
-plt.plot(y_obs[8,:], '.k', label='Observations ($y$)')
-plt.plot(x_a_enkf[8,:], 'r', label='EnKF ($x^a$)')
+plt.plot(Data_shell.T[8,0:nb], 'b', label='True state ($x$)')
+plt.plot(y_obs[8,0:nb], '.k', label='Observations ($y$)')
+plt.plot(x_a_enkf[8,0:nb], 'r', label='EnKF ($x^a$)')
 plt.xlabel('$time$', fontsize=20)
 plt.ylabel('$U_8', fontsize=20)
 plt.legend(fontsize=20)
@@ -484,15 +355,15 @@ plt.savefig(SAVE + "fig1enKF")
 plt.figure()
 y_label=('$U_4$', '$U_5$', '$U_6$', '$U_7$')
 for i in range(4,8):
-    plt.subplot(2,2,i+1)
-    plt.plot(time, Data_shell.T[2*i,:], 'b')
+    plt.subplot(2,2,i-4+1)
+    plt.plot(time[0:nb], Data_shell.T[2*i,0:nb], 'b')
     if ((i==1) or (i==2)):
-        plt.plot(time, y_obs[2*i,:], '.k') 
-    plt.plot(time, x_a_enkf[2*i,:], 'r')
-    plt.fill_between(time, x_a_enkf[i,:] - 1.96*np.sqrt(P_a_enkf[i,i,:]), x_a_enkf[i,:] + 1.96*np.sqrt(P_a_enkf[i,i,:]), facecolor='red', alpha=0.5)
+        plt.plot(time[0:nb], y_obs[2*i,0:nb], '.k') 
+    plt.plot(time[0:nb], x_a_enkf[2*i,0:nb], 'r')
+    plt.fill_between(time[0:nb], x_a_enkf[i,0:nb] - 1.96*np.sqrt(P_a_enkf[i,i,0:nb]), x_a_enkf[i,0:nb] + 1.96*np.sqrt(P_a_enkf[i,i,0:nb]), facecolor='red', alpha=0.5)
     plt.xlabel('Time', size=20)
-    plt.ylabel(y_label[i], size=20)
+    plt.ylabel(y_label[i-4], size=20)
 plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
-print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
-print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,8),:] - Data_shell.T[range(4,9),:])**2))) ### A CACHER
+print('RMSE(obs):', np.sqrt(np.mean((y_obs[range(4,9),0:nb] - Data_shell.T[range(4,9),0:nb])**2))) ### A CACHER
+print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[range(4,9),0:nb] - Data_shell.T[range(4,9),0:nb])**2))) ### A CACHER
