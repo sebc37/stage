@@ -15,7 +15,7 @@ import argparse
 
 class Train_PINN():
 
-    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=True,epoch=1000,physic=True,collocation=True,initial=True,normalize_phy=True):
+    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,w_4,iteration=True,epoch=1000,physic=True,collocation=True,initial=True,normalize_phy=True,inline_phy=True):
         self.learning_rate = learning_rate
         self.nbr_iteration = nbr_iteration
         self.w_1 = w_1
@@ -29,6 +29,7 @@ class Train_PINN():
         self.collocation = collocation
         self.initial = initial
         self.normalize_phy = normalize_phy
+        self.inline_phy = inline_phy
 
     def train(self):
 
@@ -90,22 +91,19 @@ class Train_PINN():
                         
 
 
-                u_pd = u_pd.view(2*k_max-k_min,Npts).T
-                u_t = u_t.view(2*k_max-k_min,Npts).T
-                u_pd_im = u_pd[:,1::2]
-                u_pd_real = u_pd[:,::2]
-                u_t_im = u_t[:,1::2]
-                u_t_real = u_t[:,::2]
-                # on veut calculer la loss physique sur le shells où il y a des collocations points
-                GOY_physics_im = torch.zeros(Npts,k_max).to(device)
-                GOY_physics_real = torch.zeros(Npts,k_max).to(device)
-                #print(GOY_physics.shape)
+               
 
                 ################# CALCUL LOSS PHYSIC ################################
                 if self.physic:
+                    
+                    print("shape u_t : ",u_t.shape)
+                    print("shape u_pd : ",u_pd.shape)
+                    
                     if self.inline_phy:
                         GOY_physics_ = torch.zeros_like(u_t,requires_grad=True).to(device)
                         
+                        print("shape Goy_physics_ : ",GOY_physics_.shape)
+
                         #calcul partie réelle de shell 1 
                         GOY_physics_[0:Npts] = u_t[0:Npts] - K[0]*(u_pd[2*Npts:3*Npts]*u_pd[6*Npts:7*Npts] - u_pd[3*Npts:4*Npts]*u_pd[5*Npts:6*Npts] )
                         + nu*(K[0]**2)*u_pd[0:Npts]
@@ -169,6 +167,17 @@ class Train_PINN():
                         + nu*(K[k_max-1]**2)*u_pd[(km-2)*Npts:(km-1)*Npts]
 
                     else:
+
+                        u_pd = u_pd.view(2*k_max-k_min,Npts).T
+                        u_t = u_t.view(2*k_max-k_min,Npts).T
+                        u_pd_im = u_pd[:,1::2]
+                        u_pd_real = u_pd[:,::2]
+                        u_t_im = u_t[:,1::2]
+                        u_t_real = u_t[:,::2]
+                        # on veut calculer la loss physique sur le shells où il y a des collocations points
+                        GOY_physics_im = torch.zeros(Npts,k_max).to(device)
+                        GOY_physics_real = torch.zeros(Npts,k_max).to(device)
+                        #print(GOY_physics.shape)
                     
                         # calcul sur les premiers modes
                         GOY_physics_im[:,0] = (u_t_im[:,0] - K[0]*(u_pd_real[:,1]*u_pd_real[:,2] - u_pd_im[:,1]*u_pd_im[:,2]) 
