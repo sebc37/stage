@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import Sampler
 from torch import optim
+from torch.func import functional_call, vmap, jacrev
 import tqdm
 import matplotlib.pyplot as plt
 import argparse
@@ -88,86 +89,85 @@ class Train_PINN():
                 # tuple_u_pd = tuple(k for k in u_pd_split)
                 # u_pd = torch.cat(tuple_u_pd,1).to(device)  
           
-                        
-
-
-               
 
                 ################# CALCUL LOSS PHYSIC ################################
                 if self.physic:
-                    
                     print("shape u_t : ",u_t.shape)
                     print("shape u_pd : ",u_pd.shape)
                     
                     if self.inline_phy:
-                        GOY_physics_ = torch.zeros_like(u_t,requires_grad=True).to(device)
                         
+                        GOY_physics_ = torch.zeros_like(u_t).to(device)
                         print("shape Goy_physics_ : ",GOY_physics_.shape)
-
+                        
                         #calcul partie réelle de shell 1 
-                        GOY_physics_[0:Npts] = u_t[0:Npts] - K[0]*(u_pd[2*Npts:3*Npts]*u_pd[6*Npts:7*Npts] - u_pd[3*Npts:4*Npts]*u_pd[5*Npts:6*Npts] )
-                        + nu*(K[0]**2)*u_pd[0:Npts]
+                        GOY_physics_[0:Npts] = (u_t[0:Npts] - K[0]*(u_pd[2*Npts:3*Npts]*u_pd[6*Npts:7*Npts] - u_pd[3*Npts:4*Npts]*u_pd[5*Npts:6*Npts] )
+                        + nu*(K[0]**2)*u_pd[0:Npts])#/torch.std(u_pd[0:Npts])
                         
                         #calcul partie im de shell 1 
-                        GOY_physics_[Npts:2*Npts] = u_t[Npts:2*Npts] - K[0]*(u_pd[2*Npts:3*Npts]*u_pd[5*Npts:6*Npts] - u_pd[3*Npts:4*Npts]*u_pd[6*Npts:7*Npts] )
-                        + nu*(K[0]**2)*u_pd[Npts:2*Npts]
+                        GOY_physics_[Npts:2*Npts] = (u_t[Npts:2*Npts] - K[0]*(u_pd[2*Npts:3*Npts]*u_pd[5*Npts:6*Npts] - u_pd[3*Npts:4*Npts]*u_pd[6*Npts:7*Npts] )
+                        + nu*(K[0]**2)*u_pd[Npts:2*Npts])#/torch.std(u_pd[Npts:2*Npts])
                         
                         #calcul partie re de shell 2
-                        GOY_physics_[2*Npts:3*Npts] = u_t[2*Npts:3*Npts] - K[1]*(u_pd[5*Npts:6*Npts]*u_pd[8*Npts:9*Npts] - u_pd[6*Npts:7*Npts]*u_pd[7*Npts:8*Npts])
+                        GOY_physics_[2*Npts:3*Npts] = (u_t[2*Npts:3*Npts] - K[1]*(u_pd[5*Npts:6*Npts]*u_pd[8*Npts:9*Npts] - u_pd[6*Npts:7*Npts]*u_pd[7*Npts:8*Npts])
                         +(eps/lmb)*K[1]*(u_pd[0:Npts]*u_pd[6*Npts:7*Npts] - u_pd[Npts:2*Npts]*u_pd[5*Npts:6*Npts])
-                        + nu*(K[1]**2)*u_pd[2*Npts:3*Npts]
+                        + nu*(K[1]**2)*u_pd[2*Npts:3*Npts])#/torch.std(u_pd[2*Npts:3*Npts])
                         
                         #calcucl partie im de shell 2
-                        GOY_physics_[3*Npts:4*Npts] = u_t[3*Npts:4*Npts] - K[1]*(u_pd[5*Npts:6*Npts]*u_pd[7*Npts:8*Npts] - u_pd[6*Npts:7*Npts]*u_pd[8*Npts:9*Npts])
+                        GOY_physics_[3*Npts:4*Npts] = (u_t[3*Npts:4*Npts] - K[1]*(u_pd[5*Npts:6*Npts]*u_pd[7*Npts:8*Npts] - u_pd[6*Npts:7*Npts]*u_pd[8*Npts:9*Npts])
                         +(eps/lmb)*K[1]*(u_pd[0:Npts]*u_pd[5*Npts:6*Npts] - u_pd[Npts:2*Npts]*u_pd[6*Npts:7*Npts])
-                        + nu*(K[1]**2)*u_pd[3*Npts:4*Npts]
+                        + nu*(K[1]**2)*u_pd[3*Npts:4*Npts])#/torch.std(u_pd[3*Npts:4*Npts])
 
                     
             
                         
                         for k in range(4,2*k_max-5):
                             if k%2==0:
-                                GOY_physics_[k*Npts:(k+1)*Npts] = u_t[k*Npts:(k+1)*Npts] 
-                                - K[k/2]*(u_pd[(k+2)*Npts:(k+3)*Npts]*u_pd[(k+5)*Npts:(k+6)*Npts] - u_pd[(k+4)*Npts:(k+5)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts])
-                                + (eps/lmb)*K[k/2]*(u_pd[(k-2)*Npts:(k-3)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts] - u_pd[(k-1)*Npts:(k)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
-                                - ((eps-1)/(lmb**2))*K[k/2]*(u_pd[(k-4)*Npts:(k-3)*Npts]*u_pd[(k-1)*Npts:(k)*Npts] - u_pd[(k-3)*Npts:(k-2)*Npts]*u_pd[(k-2)*Npts:(k-1)*Npts])
-                                + nu*(K[k/2]**2)*u_pd[k*Npts:(k+1)*Npts]
+                                
+                                GOY_physics_[k*Npts:(k+1)*Npts] = (u_t[k*Npts:(k+1)*Npts] 
+                                - K[int(k/2)]*(u_pd[(k+2)*Npts:(k+3)*Npts]*u_pd[(k+5)*Npts:(k+6)*Npts] - u_pd[(k+4)*Npts:(k+5)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts])
+                                + (eps/lmb)*K[int(k/2)]*(u_pd[(k-3)*Npts:(k-2)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts] - u_pd[(k-1)*Npts:(k)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
+                                - ((eps-1)/(lmb**2))*K[int(k/2)]*(u_pd[(k-4)*Npts:(k-3)*Npts]*u_pd[(k-1)*Npts:(k)*Npts] - u_pd[(k-3)*Npts:(k-2)*Npts]*u_pd[(k-2)*Npts:(k-1)*Npts])
+                                + nu*(K[int(k/2)]**2)*u_pd[k*Npts:(k+1)*Npts])#/torch.std(u_pd[k*Npts:(k+1)*Npts])
 
 
                             else:
-                                GOY_physics_[k*Npts:(k+1)*Npts] = u_t[k*Npts:(k+1)*Npts] 
-                                - K[(k-1)/2]*(u_pd[(k+1)*Npts:(k+2)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts] - u_pd[(k+4)*Npts:(k+5)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
-                                + (eps/lmb)*K[(k-1)/2]*(u_pd[(k-3)*Npts:(k-2)*Npts]*u_pd[(k+1)*Npts:(k+2)*Npts] - u_pd[(k-2)*Npts:(k-1)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
-                                - ((eps-1)/(lmb**2))*K[(k-1)/2]*(u_pd[(k-5)*Npts:(k-4)*Npts]*u_pd[(k-3)*Npts:(k-2)*Npts] - u_pd[(k-4)*Npts:(k-3)*Npts]*u_pd[(k-2)*Npts:(k-1)*Npts])
-                                + nu*(K[k/2]**2)*u_pd[k*Npts:(k+1)*Npts]
+                                GOY_physics_[k*Npts:(k+1)*Npts] = (u_t[k*Npts:(k+1)*Npts] 
+                                - K[int((k-1)/2)]*(u_pd[(k+1)*Npts:(k+2)*Npts]*u_pd[(k+3)*Npts:(k+4)*Npts] - u_pd[(k+4)*Npts:(k+5)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
+                                + (eps/lmb)*K[int((k-1)/2)]*(u_pd[(k-3)*Npts:(k-2)*Npts]*u_pd[(k+1)*Npts:(k+2)*Npts] - u_pd[(k-2)*Npts:(k-1)*Npts]*u_pd[(k+2)*Npts:(k+3)*Npts])
+                                - ((eps-1)/(lmb**2))*K[int((k-1)/2)]*(u_pd[(k-5)*Npts:(k-4)*Npts]*u_pd[(k-3)*Npts:(k-2)*Npts] - u_pd[(k-4)*Npts:(k-3)*Npts]*u_pd[(k-2)*Npts:(k-1)*Npts])
+                                + nu*(K[int(k/2)]**2)*u_pd[k*Npts:(k+1)*Npts])#/torch.std(u_pd[k*Npts:(k+1)*Npts])
                         
                         km = 2*k_max
                         
                         # calcul re de shell 21 (indice max =(2*k_max-1)*Npts)
-                        GOY_physics_[(km-5)*Npts:(km-4)*Npts] = u_t[(km-5)*Npts:(km-4)*Npts]
+                        GOY_physics_[(km-5)*Npts:(km-4)*Npts] = (u_t[(km-5)*Npts:(km-4)*Npts]
                         + K[k_max-2]*(eps/lmb)*(u_pd[(km-7)*Npts:(km-6)*Npts]*u_pd[(km-2)*Npts:(km-1)*Npts] - u_pd[(km-6)*Npts:(km-5)*Npts]*u_pd[(km-3)*Npts:(km-2)*Npts])
                         - K[k_max-2]*((eps-1)/(lmb**2))*(u_pd[(km-9)*Npts:(km-8)*Npts]*u_pd[(km-6)*Npts:(km-5)*Npts] - u_pd[(km-8)*Npts:(km-7)*Npts]*u_pd[(km-7)*Npts:(km-6)*Npts])
-                        +nu*(K[k_max-2]**2)*u_pd[(km-5)*Npts:(km-4)*Npts]
+                        +nu*(K[k_max-2]**2)*u_pd[(km-5)*Npts:(km-4)*Npts])#/torch.std(u_pd[(km-5)*Npts:(km-4)*Npts])
 
                         # calcul im de shell 21 (indice max =(2*k_max-1)*Npts)
-                        GOY_physics_[(km-4)*Npts:(km-3)*Npts] = u_t[(km-4)*Npts:(km-3)*Npts]
+                        GOY_physics_[(km-4)*Npts:(km-3)*Npts] = (u_t[(km-4)*Npts:(km-3)*Npts]
                         + K[k_max-2]*(eps/lmb)*(u_pd[(km-7)*Npts:(km-6)*Npts]*u_pd[(km-3)*Npts:(km-2)*Npts] - u_pd[(km-6)*Npts:(km-5)*Npts]*u_pd[(km-2)*Npts:(km-1)*Npts])
                         - K[k_max-2]*((eps-1)/(lmb**2))*(u_pd[(km-9)*Npts:(km-8)*Npts]*u_pd[(km-7)*Npts:(km-6)*Npts] - u_pd[(km-8)*Npts:(km-7)*Npts]*u_pd[(km-6)*Npts:(km-5)*Npts])
-                        +nu*(K[k_max-2]**2)*u_pd[(km-4)*Npts:(km-3)*Npts]
+                        +nu*(K[k_max-2]**2)*u_pd[(km-4)*Npts:(km-3)*Npts])#/torch.std(u_pd[(km-4)*Npts:(km-3)*Npts])
 
                         # calcul re shell 22
-                        GOY_physics_[(km-3)*Npts:(km-2)*Npts] = u_t[(km-3)*Npts:(km-2)*Npts] 
+                        GOY_physics_[(km-3)*Npts:(km-2)*Npts] = (u_t[(km-3)*Npts:(km-2)*Npts] 
                         - ((eps-1)/(lmb**2))*K[k_max-1]*(u_pd[(km-7)*Npts:(km-6)*Npts]*u_pd[(km-4)*Npts:(km-3)*Npts] - u_pd[(km-6)*Npts:(km-5)*Npts]*u_pd[(km-5)*Npts:(km-4)*Npts])
-                        + nu*(K[k_max-1]**2)*u_pd[(km-3)*Npts:(km-2)*Npts]
+                        + nu*(K[k_max-1]**2)*u_pd[(km-3)*Npts:(km-2)*Npts])#/torch.std(u_pd[(km-3)*Npts:(km-2)*Npts])
 
                         # calcul im shell 22
 
-                        GOY_physics_[(km-2)*Npts:(km-1)*Npts] = u_t[(km-2)*Npts:(km-1)*Npts] 
+                        GOY_physics_[(km-2)*Npts:(km-1)*Npts] = (u_t[(km-2)*Npts:(km-1)*Npts] 
                         - ((eps-1)/(lmb**2))*K[k_max-1]*(u_pd[(km-7)*Npts:(km-6)*Npts]*u_pd[(km-5)*Npts:(km-4)*Npts] - u_pd[(km-6)*Npts:(km-5)*Npts]*u_pd[(km-4)*Npts:(km-3)*Npts])
-                        + nu*(K[k_max-1]**2)*u_pd[(km-2)*Npts:(km-1)*Npts]
+                        + nu*(K[k_max-1]**2)*u_pd[(km-2)*Npts:(km-1)*Npts])#/torch.std(u_pd[(km-2)*Npts:(km-1)*Npts])
 
+                        # for k in range(2*k_max-1):
+                        #     GOY_physics_[k*Npts:(k+1)*Npts] = GOY_physics_[k*Npts:(k+1)*Npts]/torch.std(GOY_physics_[k*Npts:(k+1)*Npts])
+                        # print(GOY_physics_.shape)
                     else:
-
+                        
                         u_pd = u_pd.view(2*k_max-k_min,Npts).T
                         u_t = u_t.view(2*k_max-k_min,Npts).T
                         u_pd_im = u_pd[:,1::2]
@@ -177,8 +177,7 @@ class Train_PINN():
                         # on veut calculer la loss physique sur le shells où il y a des collocations points
                         GOY_physics_im = torch.zeros(Npts,k_max).to(device)
                         GOY_physics_real = torch.zeros(Npts,k_max).to(device)
-                        #print(GOY_physics.shape)
-                    
+
                         # calcul sur les premiers modes
                         GOY_physics_im[:,0] = (u_t_im[:,0] - K[0]*(u_pd_real[:,1]*u_pd_real[:,2] - u_pd_im[:,1]*u_pd_im[:,2]) 
                         + nu*(K[0]**2)*u_pd_im[:,0])
@@ -237,12 +236,13 @@ class Train_PINN():
                             GOY_physics_im[:,k] = (GOY_physics_im[:,k]-Mean_Phy_Goy_im[k])/Std_Phy_Goy_im[k]
                     
                         #u_t[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i] # à confirmer
-                    loss_physics = self.w_4*torch.mean(GOY_physics_)#self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device)
+                    loss_physics = self.w_4*torch.mean(GOY_physics_**2)#self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device)
                 else:
                     loss_physics = 0
                     
                 #Total Loss
-                total_loss = loss_initital_conditions + loss_boundary_conditions + loss_physics + loss_colocation
+                NTK_bc = get_ntk(model,u_pd,u)
+                total_loss = loss_initital_conditions + loss_boundary_conditions +loss_physics + loss_colocation
                 total_loss.backward()
                 self.optimizer.step()
                 loss[iteration]=total_loss.cpu().detach().numpy()
@@ -319,7 +319,37 @@ class Train_PINN():
         return loss,loss_physics_tracker,loss_colocation_tracker,loss_boundary_conditions_tracker,loss_initial_conditions_tracker
 
 
+def get_ntk(model, x1, x2):
+    """
+    Computes the NTK matrix K[i,j] = <J(x1[i]), J(x2[j])>
+    Args:
+        model : nn.Module
+        x1    : (N, d) tensor
+        x2    : (M, d) tensor
+    Returns:
+        K     : (N, M) NTK matrix
+    """
+    params = dict(model.named_parameters())
 
+    def fnet_single(params, x):
+        # Forward pass for a single input, returns shape (out_dim,)
+        return functional_call(model, params, (x.unsqueeze(0),)).squeeze(0)
+
+    # Jacobian: (N, out_dim, num_params_flat) — via vmap over the batch
+    def compute_jacobian(x):
+        # jacrev returns a dict of per-param Jacobians; we flatten and concat
+        jac = jacrev(fnet_single)(params, x)  # dict of tensors
+        # Flatten all param Jacobians into a single vector per output dim
+        jac_flat = torch.cat([j.flatten(1) for j in jac.values()], dim=1)
+        return jac_flat  # (out_dim, P)
+
+    J1 = vmap(compute_jacobian)(x1)  # (N, out_dim, P)
+    J2 = vmap(compute_jacobian)(x2)  # (M, out_dim, P)
+
+    # NTK: K[i,j] = sum over output dims and params: J1[i] @ J2[j]^T
+    # Einsum: N x out x P, M x out x P -> N x M
+    K = torch.einsum('nop,mop->nm', J1, J2)
+    return K
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
     
@@ -478,6 +508,7 @@ physic = config["physic"]
 initial = config["initial"]
 collocation = config["collocation"]
 normalize_phy = config["normalize_phy"]
+inline_phy = config["inline_phy"]
 
 # retourne un dataset pour plot , var,std,et mean pour chaque mode et les colocation point centré réduit
 Data_filtered, Data_train, mean, Var_mode, Std_mode, perc, = filter_mode(Data_shell,2*k_min_collocation,2*k_max_collocation,0,ratio,123456)
@@ -575,7 +606,7 @@ Dataloader_grid = DataLoader(grid_dataset,batch_sampler=sampler_grid)
 learning_rate,nbr_iteration,w_1,w_2,w3,w_4 = 0.001,nbr_iteration,1,1,1,1
 t = Train_PINN(learning_rate,nbr_iteration,w_1,w_2,w3,w_4,
                physic=physic,initial=initial,collocation=collocation,
-               normalize_phy= normalize_phy)
+               normalize_phy= normalize_phy,inline_phy=inline_phy)
 Total_loss = t.train()
 model.eval().to(device)
 

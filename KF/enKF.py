@@ -109,9 +109,7 @@ Data_filtered, Data_train, mean, Var_mode, Std_mode, perc= filter_mode(Data_shel
 
 K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 
-y_obs = Data_filtered.T + np.random.normal(0,1.0e-4,size=(44,90090)) #noisy observations
 
-y_obs = y_obs[2*k_min_collocation:2*k_max_collocation,:]
 
 # for i in range(np.shape(y_obs)[0]):
 #     plt.figure()
@@ -127,9 +125,9 @@ n     = 44 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
-var_Q = 1.0e-12 # error variance of the model (in Kalman)
+var_Q = 1.0e-10 # error variance of the model (in Kalman)
 var_R = 0.1 # error variance of the observations (in Kalman)
-x_0   = (np.zeros((n))+ mean)*1.0e-12 # initial coundition (mean)
+x_0   = np.zeros((n)) # initial coundition (mean)
 P_0   = np.eye(n,n)*1.e-12 # initial coundition (covariance)
 
 
@@ -144,7 +142,12 @@ for i in range(p):
             R[i,j] = m[i]
 #R      = np.fill_diagonal(R,list(m[:]))#var_R*np.eye(p,p)
 
-# R = (0.05**2)*
+##############  noisy observations ##################
+y_obs = Data_shell.T  
+y_obs = y_obs[2*k_min_collocation:2*k_max_collocation,:]
+for t in range(Npts):
+    y_obs[:,t]  = y_obs[:,t] + np.random.multivariate_normal(np.zeros(p),R)
+
 
 # ### true state and noisy observations
 # x = c_[x1, x2, x1_dot, x2_dot].T # true state
@@ -306,7 +309,7 @@ y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
 
 
-nb = 50
+nb = 44
 for i in range(Ne):
     x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
 
