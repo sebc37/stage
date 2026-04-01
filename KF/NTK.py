@@ -89,3 +89,5 @@ def goy_residual_ntk(model, t_col):
         shell_eigs[n] = torch.linalg.eigvalsh(K_n)
 
     return K_mat, shell_eigs
+
+

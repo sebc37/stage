@@ -39,6 +39,11 @@ class Train_PINN():
         loss_colocation_tracker = np.zeros((self.nbr_iteration,1))
         loss_boundary_conditions_tracker = np.zeros((self.nbr_iteration,1))
         loss_initial_conditions_tracker = np.zeros((self.nbr_iteration,1))
+        lmb_tracker_phy = np.zeros((self.nbr_iteration,1))
+        lmb_tracker_bc = np.zeros((self.nbr_iteration,1))
+        weighter = DynamicLossWeighter(alpha=0.9)
+
+        params = list(model.parameters())
         if self.iteration:
             for iteration in tqdm.tqdm(range(self.nbr_iteration)):
                 self.optimizer.zero_grad()
@@ -236,13 +241,19 @@ class Train_PINN():
                             GOY_physics_im[:,k] = (GOY_physics_im[:,k]-Mean_Phy_Goy_im[k])/Std_Phy_Goy_im[k]
                     
                         #u_t[:,i] -K[i]*u_pd[:,i+1]*u_pd[:,i+2] +K[i]*eps/lmb*u_pd[:,i-1]*u_pd[:,i+1] + K[i]*((eps-1)/lmb**2)*u_pd[:,i-2]*u_pd[:,i-1] + nu*K[i]*K[i]*u_pd[:,i] # à confirmer
-                    loss_physics = self.w_4*torch.mean(GOY_physics_**2)#self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device)
+                    loss_physics =  self.w_4*torch.mean(GOY_physics_real**2+GOY_physics_im**2).to(device) #self.w_4*torch.mean(GOY_physics_**2)
                 else:
                     loss_physics = 0
-                    
+                
+                if iteration % 100 == 0:
+                    weighter.update( loss_ic=0,loss_bc=loss_boundary_conditions, loss_r=loss_physics, model_params=params)
+
+    # Loss totale pondérée
+                total_loss = weighter.weighted_loss(loss_ic=0,loss_bc=loss_boundary_conditions, loss_r=loss_physics)
+
                 #Total Loss
-                NTK_bc = get_ntk(model,u_pd,u)
-                total_loss = loss_initital_conditions + loss_boundary_conditions +loss_physics + loss_colocation
+                #NTK_bc = get_ntk(model,u_pd,u)
+                #total_loss = loss_initital_conditions + loss_boundary_conditions +loss_physics + loss_colocation
                 total_loss.backward()
                 self.optimizer.step()
                 loss[iteration]=total_loss.cpu().detach().numpy()
@@ -261,6 +272,8 @@ class Train_PINN():
                     loss_initial_conditions_tracker[iteration] = loss_initital_conditions.cpu().detach().numpy()
                 else:
                     loss_initial_conditions_tracker[iteration] = loss_initital_conditions
+                lmb_tracker_phy[iteration] = weighter.lambda_r#.cpu().detach().numpy()
+                lmb_tracker_bc[iteration] = weighter.lambda_bc.cpu().detach().numpy()
         else:
                 # regarder comment calculer les loss 
                 loss_func = torch.nn.MSELoss()
@@ -316,7 +329,7 @@ class Train_PINN():
         print(total_loss)
             
             
-        return loss,loss_physics_tracker,loss_colocation_tracker,loss_boundary_conditions_tracker,loss_initial_conditions_tracker
+        return loss,loss_physics_tracker,loss_colocation_tracker,loss_boundary_conditions_tracker,loss_initial_conditions_tracker,lmb_tracker_bc,lmb_tracker_phy,u_t
 
 
 def get_ntk(model, x1, x2):
@@ -620,12 +633,17 @@ square_error = (U-U_exa)**2
 rmse = np.sqrt(np.mean(square_error))
 print("RMSE:", rmse)
 
+du_dt = Total_loss[-1]
 
+du_split = torch.split(du_dt,Npts)
+DUDT = torch.cat(tuple(k for k in du_split),1)
+DUDT = DUDT.cpu().detach().numpy()
 
 for i in range(U.shape[1]):
     plt.figure()
     plt.plot(U[:,i],label=f'Predicted u{i}')
     plt.plot(U_exa[:,i],label=f'Exact u{i}')
+    plt.plot(DUDT[:,i],label = f"du/dt {i}")
     plt.xlabel('Time')
     plt.ylabel('Velocity')
     plt.legend()
@@ -646,3 +664,11 @@ plt.xlabel('Iterations')
 plt.ylabel('Losses')
 plt.legend()
 plt.savefig(PATH + f"losses.png") #_{int(ratio*100)}
+
+plt.figure()
+plt.plot(np.log10(Total_loss[-3]),label='lmb bc')
+plt.plot(np.log10(Total_loss[-2]),label='lmb phy')
+plt.xlabel('Iterations')
+plt.ylabel('Lambda')
+plt.legend()
+plt.savefig(PATH + f"lambda.png") #_{int(ratio*100)}

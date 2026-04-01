@@ -247,6 +247,16 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
         # maintenant Xp/Yp = ref[i] à la précision machine, Xpp/Ypp = état à t_i - dt
     return Xpp,Ypp,Xp,Yp
 
+def m_step(Xpp, Ypp, Xp, Yp):
+    """
+    Intègre le modèle GOY de N_fs pas.
+    Entrée  : Xpp,Ypp (t-dt)  Xp,Yp (t)
+    Sortie  : Xpp_new,Ypp_new (t+N_fs*dt - dt)  Xp_new,Yp_new (t+N_fs*dt)
+    """
+    (Xpp_new, Ypp_new), (Xp_new, Yp_new) = model.integrate(
+        Xpp, Ypp, Xp, Yp, n_steps=N_fs)
+    return Xpp_new, Ypp_new, Xp_new, Yp_new
+
 j_ = 50
 nb_iter = 3
 count_init   = int(TIME / DT)  
@@ -295,8 +305,10 @@ def generate_observations(p, H):
 H = np.eye(44,44) #array([[1,0,0,0], [0,1,0,0]])
 H = H[2*k_min_collocation:2*k_max_collocation,:] # on observe que les modes de 5 à 10 avec Re et Im donc 12 variables d'observations
 
+
+
 ### Ensemble Kalman initialization
-Ne = 100                   # number of ensembles
+Ne = 50                   # number of ensembles
 x_f_enkf = np.zeros((n,nb))   # forecast state
 P_f_enkf = np.zeros((n,n,nb)) # forecast error covariance matrix
 x_a_enkf = np.zeros((n,nb))   # analysed state
@@ -308,10 +320,40 @@ x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
 
+ens_Xpp = np.zeros((Ne, n))
+ens_Ypp = np.zeros((Ne, n))
+ens_Xp  = np.zeros((Ne, n))
+ens_Yp  = np.zeros((Ne, n))
+
+
+fens_Xpp = np.zeros((Ne, n))
+fens_Ypp = np.zeros((Ne, n))
+fens_Xp  = np.zeros((Ne, n))
+fens_Yp  = np.zeros((Ne, n))
+
+
+# condition initiales
+j_start = 2
+
+(cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
+    Data_shell[j_start-2, 0::2], Data_shell[j_start-2, 1::2],
+    Data_shell[j_start-1, 0::2], Data_shell[j_start-1, 1::2],
+    n_steps=N_fs - 1)
+(ref_Xpp, ref_Ypp), (ref_Xp, ref_Yp) = model.integrate(
+    cur_Xpp, cur_Ypp, cur_Xp, cur_Yp, n_steps=1)
+
+
+amp = np.std(Data_shell, axis=0)
 
 nb = 44
 for i in range(Ne):
     x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
+    
+    noise = np.random.randn(n) * amp * 0.01   # perturbation 1%
+    ens_Xpp[i] = ref_Xpp + noise[0::2] * 0.1  # Xpp varie peu
+    ens_Ypp[i] = ref_Ypp + noise[1::2] * 0.1
+    ens_Xp[i]  = ref_Xp  + noise[0::2]
+    ens_Yp[i]  = ref_Yp  + noise[1::2]
 
 x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
 P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
@@ -320,6 +362,16 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # prediction step
     # il faut un initialisation custom pour chaque Ne
     for i in range(Ne):
+        Xpp_n, Ypp_n, Xp_n, Yp_n = m_step(
+                ens_Xpp[i], ens_Ypp[i], ens_Xp[i], ens_Yp[i])
+
+        fens_Xpp[i] = Xpp_n
+        fens_Ypp[i] = Ypp_n
+        fens_Xp[i]  = Xp_n
+        fens_Yp[i]  = Yp_n
+
+        x_f_enkf_tmp[0::2,i] = Xp_n.T
+        x_f_enkf_tmp[1::2,i] = Yp_n.T
         _,_,forward_x,forward_y  = m_b(x_a_enkf_tmp[:,i].T,N_fs=999,n_steps_first=998,custom=True)
         x_f_enkf_tmp[0::2,i],x_f_enkf_tmp[1::2,i] = forward_x.T,forward_y.T ### A CACHER
         x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)

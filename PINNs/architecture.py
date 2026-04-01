@@ -167,3 +167,82 @@ class grid_data(Dataset): # créer la grille sur laquelle on veut inferer U(k,t)
     def __getitem__(self,idx):
         #print(f'idx {idx}')
         return self.grid[idx,0],self.grid[idx,1],idx  # This class only returns the x and t values of the grid not the velocity
+
+
+# calcul des loss
+
+class DynamicLossWeighter:
+    def __init__(self, alpha=0.9):
+        """
+        alpha: coefficient du moving average (ex: 0.9)
+        """
+        self.alpha = alpha
+        # Initialisation des poids globaux
+        self.lambda_ic  = 1/3
+        self.lambda_bc  = 1/3
+        self.lambda_r   = 1/3
+
+    def compute_weights(self, loss_ic, loss_bc, loss_r, model_params):
+        """
+        Calcule les nouveaux poids lambda selon les normes des gradients.
+        
+        loss_ic, loss_bc, loss_r : tenseurs scalaires (non réduits)
+        model_params : list(model.parameters())
+        """
+
+        def grad_norm(loss):
+            """Calcule la norme L2 du gradient de `loss` par rapport aux paramètres."""
+            grads = torch.autograd.grad(
+                loss, model_params,
+                retain_graph=True, create_graph=False, allow_unused=True
+            )
+            print("shape : " , len(grads))
+            total = sum(
+                g.norm() ** 2
+                for g in grads if g is not None
+            )
+            for g in grads:
+                print("type of g : ", type(g))
+                print(torch.mean(g))
+            return total.sqrt()
+
+        #norm_ic = grad_norm(loss_ic)
+        norm_bc = grad_norm(loss_bc)
+        norm_r  = grad_norm(loss_r)
+        print("norme bc : " , norm_bc, type(norm_bc))
+        print("norme phy : ",norm_r, type(norm_r))
+        total =  + norm_bc + norm_r #+norm_ic # dénominateur commun du numérateur
+
+        # Formules de l'image
+        lambda_ic_hat = 0#total / norm_ic
+        lambda_bc_hat = total / norm_bc
+        lambda_r_hat  = total / norm_r
+        print("lmb bc pondéré : ",lambda_bc_hat,type(lambda_bc_hat))
+        print("lmb phy pondéré : ",lambda_r_hat,type(lambda_r_hat))
+        return  lambda_bc_hat, lambda_r_hat ,lambda_ic_hat
+
+    def update(self, loss_ic, loss_bc, loss_r, model_params):
+        """
+        Met à jour les poids avec le moving average :
+            lambda_new = alpha * lambda_old + (1 - alpha) * lambda_hat_new
+        """
+        with torch.no_grad():
+            l_ic, l_bc, l_r = self.compute_weights(
+                loss_ic, loss_bc, loss_r, model_params
+            )
+            
+            self.lambda_ic = self.alpha * self.lambda_ic + (1 - self.alpha) * l_ic#.item()
+            self.lambda_bc = self.alpha * self.lambda_bc + (1 - self.alpha) * l_bc#.item()
+            self.lambda_r  = self.alpha * self.lambda_r  + (1 - self.alpha) * l_r#.item()
+
+        
+
+    def weighted_loss(self, loss_ic, loss_bc, loss_r):
+        """Retourne la loss totale pondérée."""
+        print("lmb used bc : ",self.lambda_bc,type(self.lambda_bc))
+        print("lmb used phy : ",self.lambda_r,type(self.lambda_r))
+        return (
+            #self.lambda_ic * loss_ic +
+            self.lambda_bc * loss_bc +
+            self.lambda_r  * loss_r
+        )
