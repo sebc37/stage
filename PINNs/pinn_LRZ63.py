@@ -78,18 +78,30 @@ X_BC = torch.tensor(x_bc) # x
 X_CL = torch.tensor(x_cl) # y,z point aléatoire
 X_IC = torch.tensor(x_ic) # x(0),y(0),z(0)
 
-T = torch.tensor(time)
-T_CL = torch.stack((torch.tensor(i_cl),torch.tensor(i_cl)),dim=0)
+T = torch.tensor(time,dtype=torch.float32)
+T_CL = torch.stack((torch.tensor(i_cl,dtype=torch.float32),torch.tensor(i_cl,dtype=torch.float32)),dim=0)
 T_IC = torch.zeros(3)
 
 dataset_bc = torch.utils.data.TensorDataset(T,X_BC)
 dataset_cl = torch.utils.data.TensorDataset(T_CL,X_CL)
 dataset_ic = torch.utils.data.TensorDataset(T_IC,X_IC)
 
+plt.figure()
 plt.plot(time,x_bc.T)
 plt.plot(i_cl,x_cl.T,'*')
 plt.show()
 
+plt.figure()
+plt.plot(T,X_BC)
+plt.plot(T_CL.mT,X_CL.mT,'*')
+plt.show()
+
+##############
+# Dataloader #
+##############
+
+trainloader_bc = torch.utils.data.DataLoader(dataset_bc, batch_size=128, shuffle=True, drop_last=False)
+trainloader_cl = torch.utils.data.DataLoader(dataset_cl, batch_size=128, shuffle=True, drop_last=False)
 
 ###############################
 # loss BC, IC ,CL et physique #
