@@ -68,36 +68,40 @@ for t in range(1,nb):
 x_bc = x[0,:]
 x_ic = x[:,0]
 
+
+
 iy_cl = np.random.choice(range(nb), 500)
 iz_cl = np.random.choice(range(nb), 500)
 
-y_cl = np.c_[iy_cl,np.array([1 for _ in range(500)],dtype=np.float32),x[1,iy_cl]]
-z_cl = np.c_[iz_cl,np.array([2 for _ in range(500)],dtype=np.float32),x[2,iz_cl]]
-x_cl = np.r_[y_cl,z_cl]
+# y_cl = np.c_[iy_cl,np.array([1 for _ in range(500)],dtype=np.float32),x[1,iy_cl]]
+# z_cl = np.c_[iz_cl,np.array([2 for _ in range(500)],dtype=np.float32),x[2,iz_cl]]
+i_cl =np.c_[iy_cl,iz_cl]
+x_cl = np.c_[x[1,iy_cl],x[2,iz_cl]]
 
 
 ### dataset mis sous forme de tensor
 X_BC = torch.tensor(x_bc,dtype=torch.float32) # x
 X_CL = torch.tensor(x_cl,dtype=torch.float32) # y,z point aléatoire
 X_IC = torch.tensor(x_ic,dtype=torch.float32) # x(0),y(0),z(0)
-
+X_ALL = torch.tensor(x,dtype=torch.float32) # x,y,z 
 ### grille 
 T = torch.tensor(time,dtype=torch.float32)
-X = torch.stack((T,torch.zeros_like(T,dtype=torch.float32)))
-Y = torch.stack((T,torch.ones_like(T,dtype=torch.float32)))
-Z = torch.stack((T,torch.ones_like(T,dtype=torch.float32)*2))
 
-FULL_GRID = torch.cat((X,Y,Z),dim=1).mT
+# X = torch.stack((T,torch.zeros_like(T,dtype=torch.float32),torch.tensor(x[0,:],dtype=torch.float32)))
+# Y = torch.stack((T,torch.ones_like(T,dtype=torch.float32),torch.tensor(x[1,:],dtype=torch.float32)))
+# Z = torch.stack((T,torch.ones_like(T,dtype=torch.float32)*2,torch.tensor(x[2,:],dtype=torch.float32)))
+
+# FULL_GRID = torch.cat((X,Y,Z),dim=1).mT
 
 
 #T_CL = torch.tensor(i_cl,dtype=torch.float32)#torch.stack((torch.tensor(i_cl,dtype=torch.float32),torch.tensor(i_cl,dtype=torch.float32)),dim=0)
-T_IC = torch.stack((torch.zeros(n,dtype=torch.float32),torch.tensor([i for i in range(n)],dtype=torch.float32)))
-POS = torch.zeros_like(T)
+# T_IC = torch.stack((torch.zeros(n,dtype=torch.float32),torch.tensor([i for i in range(n)],dtype=torch.float32)))
+# POS = torch.zeros_like(T)
 
 
 
-dataset_bc = torch.utils.data.TensorDataset(torch.stack((T,POS,X_BC)).mT)
-dataset_cl = torch.utils.data.TensorDataset(X_CL) # indice dans T_CL ou X_CL donne y=0 ou z=1 
+#dataset_bc = torch.utils.data.TensorDataset(torch.stack((T,POS,X_BC)).mT)
+#dataset_cl = torch.utils.data.TensorDataset(X_CL) # indice dans T_CL ou X_CL donne y=0 ou z=1 
 
 
 # plt.figure()
@@ -136,18 +140,40 @@ def loss_bc(x,y):
 def loss_ic(x,y):
     return torch.mean((x-y)**2)
 
-def loss_phy(x,dx):
+def loss_phy(x,y,z,T):
     
+    #dxyz = torch.autograd.grad(XYZ,T,torch.ones_like(XYZ),create_graph=True)
+    # dx = dxyz[:,0:1]
+    # dy = dxyz[:,1:2]
+    # dz = dxyz[:,2:3]
+    dx = grad(x,T)
+    dy = grad(y,T)
+    dz = grad(z,T)
+
+    res_x = dx - sigma*(y-x)
+    res_y = dy - (x*(rho-z) - y)
+    res_z = dz - (x*y - beta*z)
+    loss_phy = torch.mean(res_x**2) + torch.mean(res_y**2) + torch.mean(res_z**2)
     #dydt = torch.autograd.grad(x[:,1],grid,torch.ones_like(x),create_graph=True)[0][:,0]
-    LOSS_PHY = torch.zeros_like(x,dtype=torch.float32)
-    LOSS_PHY[0:nb] = dx[0:nb] - sigma*(x[nb:2*nb] - x[0:nb])
-    LOSS_PHY[nb:2*nb] = dx[nb:2*nb] - (rho*x[0:nb] - x[nb:2*nb] - x[0:nb]*x[2*nb:3*nb])
-    LOSS_PHY[2*nb:3*nb] = dx[2*nb:3*nb] - (x[0:nb]*x[nb:2*nb]- beta*x[2*nb:3*nb])
+    # LOSS_PHY = torch.zeros_like(x,dtype=torch.float32).to(device)
+    # LOSS_PHY[0:nb] = dx[0:nb] - sigma*(x[nb:2*nb] - x[0:nb])
+    # LOSS_PHY[nb:2*nb] = dx[nb:2*nb] - (rho*x[0:nb] - x[nb:2*nb] - x[0:nb]*x[2*nb:3*nb])
+    # LOSS_PHY[2*nb:3*nb] = dx[2*nb:3*nb] - (x[0:nb]*x[nb:2*nb]- beta*x[2*nb:3*nb])
     # loss = torch.mean(LOSS_PHY**2)
-    return torch.mean(LOSS_PHY**2)
+    return loss_phy
 
 # a = loss_bc(X_BC,X_BC)
 # print("a")
+
+def grad(y, t):
+    return torch.autograd.grad(
+        y, t,
+        grad_outputs=torch.ones_like(y),   # sum over N points
+        create_graph=True,                 # ← keep graph for higher-order or loss backprop
+        retain_graph=True
+    )[0]   
+
+
 
 #############
 #   Train   #
@@ -174,46 +200,53 @@ class Train_PINN():
         for iteration in tqdm.tqdm(range(self.nbr_iteration)):
             self.optimizer.zero_grad()
 
-            #initial conditions Loss
-            initial_train_data = torch.cat((T_IC,X_IC.unsqueeze(0))).mT#torch.tensor(initial_train_dataset)
-            u_pd_ini = model(initial_train_data[:, 0:2])
-            u_exa_ini = initial_train_data[:,2:3]
-            loss_initital_conditions = self.w_1*torch.mean((u_pd_ini-u_exa_ini)**2)
+            # #initial conditions Loss
+            # initial_train_data = torch.cat((T_IC,X_IC.unsqueeze(0))).mT.to(device)#torch.tensor(initial_train_dataset)
+            # u_pd_ini = model(initial_train_data[:, 0:2])
+            # u_exa_ini = initial_train_data[:,2:3]
+            # loss_initital_conditions = self.w_1*torch.mean((u_pd_ini-u_exa_ini)**2)
            
             #Boundary conditions Loss
-            boundary_train_data = dataset_bc
-            u_pd_bou = model(boundary_train_data[:,0:2][0])
-            u_exa_bou = boundary_train_data[:,2:3][0]
-            loss_boundary_conditions = self.w_2*torch.mean((u_pd_bou-u_exa_bou)**2)
+            # boundary_train_data = dataset_bc
+            # u_pd_bou = model(boundary_train_data[:,0:2][0].to(device))
+            # u_exa_bou = boundary_train_data[:,2:3][0].to(device)
+            # loss_boundary_conditions = self.w_2*torch.mean((u_pd_bou-u_exa_bou)**2)
+            t = T.unsqueeze(-1).requires_grad_().to(device)
+            u_pd_all = model(t)
+            u_exa_all = X_ALL.mT.to(device)
+
+            loss_boundary_conditions = self.w_2*torch.mean((u_pd_all-u_exa_all)**2)
+
 
             # Collocation conditions Loss
-            collocation_train_data = dataset_cl
-            u_pd_cl = model(collocation_train_data[:,0:2][0])
-            u_exa_cl = collocation_train_data[:,2:3][0]
-            loss_collocation_conditions = self.w_3*torch.mean((u_pd_cl-u_exa_cl)**2)
+            # collocation_train_data = dataset_cl
+            # u_pd_cl = model(collocation_train_data[:,0:2][0].to(device))
+            # u_exa_cl = collocation_train_data[:,2:3][0].to(device)
+            # loss_collocation_conditions = self.w_3*torch.mean((u_pd_cl-u_exa_cl)**2)
 
             #Physical Loss
-            train_data = FULL_GRID.requires_grad_(True)
-            u_pd = model(train_data)
+            # train_data = FULL_GRID[:,0:2].requires_grad_(True).to(device)
+            # u_pd = model(train_data)
             #a = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)
-            u_t = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
+            #u_t = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
 
             # u_x = torch.autograd.grad(u_pd, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
             # u_xx = torch.autograd.grad(u_x, train_data, torch.ones_like(u_pd), create_graph=True)[0][:,0:1]
             #physics = u_t + u_pd*u_x - nu*u_xx
-            loss_physics = self.w_3*loss_phy(u_pd,u_t)
+            u_pd_all.requires_grad_()
+            loss_physics = self.w_3*loss_phy(x=u_pd_all[:,0:1],y=u_pd_all[:,1:2],z=u_pd_all[:,2:3],T=t)
 
             #Total Loss
-            total_loss = loss_initital_conditions + loss_boundary_conditions + loss_collocation_conditions + loss_physics
+            total_loss =  loss_boundary_conditions + loss_physics#+ loss_physics #loss_initital_conditions +  loss_collocation_conditions
             total_loss.backward()
             self.optimizer.step()
             
             # Save losses
-            loss[iteration]=total_loss.detach().numpy()
-            loss_bc_tracker[iteration] = loss_boundary_conditions.detach().numpy()
-            loss_cl_tracker[iteration] = loss_collocation_conditions.detach().numpy()
-            loss_phy_tracker[iteration] = loss_physics.detach().numpy()
-            loss_ic_tracker[iteration] = loss_initital_conditions.detach().numpy()
+            loss[iteration]=total_loss.cpu().detach().numpy()
+            loss_bc_tracker[iteration] = loss_boundary_conditions.cpu().detach().numpy()
+            #loss_cl_tracker[iteration] = loss_collocation_conditions.cpu().detach().numpy()
+            loss_phy_tracker[iteration] = loss_physics.cpu().detach().numpy()
+            #loss_ic_tracker[iteration] = loss_initital_conditions.cpu().detach().numpy()
         return loss,loss_ic_tracker,loss_bc_tracker,loss_cl_tracker,loss_phy_tracker
 
 
@@ -222,15 +255,16 @@ class Train_PINN():
 #   modèle  #
 # ###########            
 
-model = architecture.GOY_PINN(2,1,32,4)
+model = architecture.GOY_PINN(1,3,64,4)
+model.to(device)
 
-lr = 1.0e-5
-nb_iter = 100
+lr = 1.0e-4
+nb_iter = 1000
 t =Train_PINN(learning_rate=lr,nbr_iteration=nb_iter,w_1=1,w_2=1,w_3=1)
 l,li,lb,lc,lp =  t.train()
 
-U_pred = model(FULL_GRID)
-U = U_pred.view((n,nb)).mT.detach().numpy()
+U_pred = model(T.unsqueeze(-1).to(device))
+U = U_pred.view((n,nb)).mT.cpu().detach().numpy()
 
 
 #############
@@ -238,15 +272,9 @@ U = U_pred.view((n,nb)).mT.detach().numpy()
 #############
 
 # prediction vs realité
-unique = np.unique(x_cl[:,1])
-
-colors = plt.cm.Set2(        # colormap discret
-    (x_cl[:,1] - x_cl[:,1].min()) / (x_cl[:,1].max() - x_cl[:,1].min())
-)
-
 plt.figure()
 plt.plot(time,x_bc.T)
-plt.scatter(x_cl[:,0],x_cl[:,2],c=colors,marker='*')
+plt.plot(i_cl.T,x_cl.T,'*')
 plt.plot(time,U[:,0],label="x pred")
 plt.plot(time,U[:,1],label="y pred")
 plt.plot(time,U[:,2],label="z pred")
