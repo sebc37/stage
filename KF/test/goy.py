@@ -147,13 +147,13 @@ class GoyModel:
         Ypp = _np.full(self.N, 1e-4,dtype=np.float64)
 
         # need A[] – recompute here (stored in C side, replicate in Python)
-        A = _np.exp(-self._nu * sh**2 * self.dt)
+        A = _np.exp(-self._nu * sh**2 * self.dt,dtype=np.float64)
 
         # call lib to get NX/NY for one step (hack: integrate 1 step from same state,
         # but we only need NXpp → compute manually in Python with same formulas)
         lmb = self._lmb; eps = self._eps; N = self.N
-        A2 = _np.full(N, -eps/lmb)
-        A3 = _np.full(N, -(1-eps)/(lmb**2))
+        A2 = _np.full(N, -eps/lmb,dtype=np.float64)
+        A3 = _np.full(N, -(1-eps)/(lmb**2),dtype=np.float64)
 
         def _NX(ax, ay):
             res = _np.zeros(N,dtype=np.float64)

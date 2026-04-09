@@ -5,15 +5,15 @@ model = GoyModel()         # paramètres identiques au code original
 sh = model.shell_wavenumbers()
 
 # conditions initiales
-# Xpp = sh**(-1/3)
-# Ypp = np.full(model.N, 1e-4)
-# Xp, Yp = Xpp.copy(), Ypp.copy()
+Xpp = sh**(-1/3)
+Ypp = np.full(model.N, 1e-4)
+Xp, Yp = Xpp.copy(), Ypp.copy()
 n_step = 100100
 state = np.zeros((n_step,44))
 
 Xpp, Ypp, Xp, Yp = model.init_fields()
 
-data  = np.loadtxt("/home/s26calme/Documents/code_stage/GOY-main/data_test_precis.dat")
+data  = np.loadtxt("/home/s26calme/Documents/code_stage/GOY-main/data_test_precis.dat",dtype=np.float32)
 X_ref = data[:, 0::2]   # (n_snap, N)
 Y_ref = data[:, 1::2]
 
@@ -84,7 +84,7 @@ for i in range(2,n_step):
 
     (Xp_out, Yp_out), (state[i,0::2],state[i,1::2]) = model.integrate(state[i-2,0::2], state[i-2,1::2],
                 state[i-1,0::2], state[i-1,1::2],  # ← 1::2 pour Y
-                n_steps=1000)
+                n_steps=999)
 ecart_x = state[:,0::2]-X_ref
 ecart_y = state[:,1::2]-Y_ref
 

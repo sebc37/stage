@@ -18,7 +18,7 @@ from goy import GoyModel
 
 def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
     
-    np.random.seed(seed=seed)
+    #np.random.seed(seed=seed)
     X_subset = np.copy(X)
     X_subset[:,0:mode_min] = None #enlève les modes inférieurs à mode_min
     X_subset[0:t_min,:] = None #enlève la phase de stabilisation
@@ -82,10 +82,10 @@ def reduced_center(X,mean,std):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test.dat"
+path_data = PATH + "data_test_precis.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF/"
 
-data =  np.loadtxt(path_data,dtype=np.float32) # charge le jeu de données
+data =  np.loadtxt(path_data,dtype=np.float64) # charge le jeu de données
 Nmax = np.shape(data)[0] # nombres de pas de temps
 debut = int(0.1*Nmax) # skip la phase de stabilisation
 
@@ -116,37 +116,56 @@ K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 #     plt.plot(y_obs[i,:],'*')
 #     plt.plot(Data_shell[:,i],'gray',alpha=0.5)
 #     plt.savefig(PATH + "ploty",dpi=300)
+
 shell_array = np.array(Data_shell)
-MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2) for k in range(44)])
+MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2 ) for k in range(0,44,2)])
+#MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2 + shell_array[:,k+1]**2) for k in range(44)]) # variance de l'observation pour chaque shell
 
 
 ### parameters
-n     = 44 # state size  on veut estimer les Un de 1 à 10 avec Re et Im donc 20 variables d'état
+n     = 44 # state size  on veut estimer les Un de 1 à 22 avec Re et Im donc 44 variables d'état
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
 var_Q = 1.0e-10 # error variance of the model (in Kalman)
-var_R = 0.1 # error variance of the observations (in Kalman)
-x_0   = np.zeros((n)) # initial coundition (mean)
-P_0   = np.eye(n,n)*1.e-12 # initial coundition (covariance)
+#var_R = 0.1 # error variance of the observations (in Kalman)
+#x_0   = np.zeros((n)) # initial coundition (mean)
+x_0   = Data_shell[0,:] # initial coundition (mean) = première ligne du jeu de données
+P_0   = np.eye(n,n) # initial coundition (covariance)
+for i in range(22):
+    P_0[2*i,2*i] = MS[i]
+    P_0[2*i+1,2*i+1] = MS[i] # initial covariance = variance of each shell in the data
 
 
 ### variables
 
-m = MS[2*4:2*10]
+m = MS[4:10]
 R = np.eye(p,p)
 Q      = var_Q*np.eye(n,n)
-for i in range(p):
-    for j in range(p):
-        if i==j:
-            R[i,j] = m[i]
+for i in range(int(p/2)):
+    R[2*i,2*i] = m[i]
+    R[2*i+1,2*i+1] = m[i] # observation covariance = variance de chaque shell observé dans les données
 #R      = np.fill_diagonal(R,list(m[:]))#var_R*np.eye(p,p)
 
 ##############  noisy observations ##################
-y_obs = Data_shell.T  
-y_obs = y_obs[2*k_min_collocation:2*k_max_collocation,:]
-for t in range(Npts):
-    y_obs[:,t]  = y_obs[:,t] + np.random.multivariate_normal(np.zeros(p),R)
+y_obs = Data_shell.T.copy() # observations = données réelles  
+y_obs_ = y_obs[2*k_min_collocation:2*k_max_collocation,:]
+a = y_obs_.copy()
+
+# for t in range(Npts):
+#     y_obs_[:,t]  = y_obs_[:,t] + np.random.multivariate_normal(np.zeros(p),R)
+#y_obs = H @ Data_shell.T + np.random.multivariate_normal(np.zeros(p),R,size=(Npts,)).T # observations bruitées = H @ données réelles + bruit gaussien
+
+# for i in range(p):
+#     plt.figure()
+#     #plt.plot(y_obs_[i,:],'.k',alpha=0.2,label='Observations')
+#     plt.fill_between(time[0:nb], a[i,0:nb] - 1.96*np.sqrt(R[i,i]), a[i,0:nb] + 1.96*np.sqrt(R[i,i]), facecolor='red')
+#     plt.plot(a[i,:], 'b', label='True state')
+#     plt.xlabel('Time', size=20)
+#     plt.ylabel(f'$U_{2*(i+k_min_collocation//2)}$ (shell {i+k_min_collocation//2})', size=20)
+#     plt.legend(fontsize=20)
+#     plt.savefig(SAVE + f"fig{i}enKF")
+
 
 
 # ### true state and noisy observations
@@ -198,6 +217,7 @@ def NL(x_past_real,x_past_imag):
     return NL_re, NL_im
 
 
+######### paramètres du modèle pour l'intégration #############################
 TIME      = 1000.
 DT        = 1e-5
 FS        = 100.
@@ -228,7 +248,7 @@ def m_b(x_past,N_fs,n_steps_first,start=False,second = False,custom=False):
     else:
         # ligne i-1 → intègre N_fs-1 pas → arrive à t_i - dt
         if custom:
-            Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0::2],Ypp=x_past[1::2])
+            Xpp0,Ypp0,Xp0,Yp0 = model.init_fields(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2])
             (cur_Xpp, cur_Ypp), (cur_Xp, cur_Yp) = model.integrate(
                 Xpp0, Ypp0, Xp0, Yp0, n_steps=n_steps_first)
             return cur_Xpp,cur_Ypp,cur_Xp,cur_Yp
@@ -257,32 +277,37 @@ def m_step(Xpp, Ypp, Xp, Yp):
         Xpp, Ypp, Xp, Yp, n_steps=N_fs)
     return Xpp_new, Ypp_new, Xp_new, Yp_new
 
-j_ = 50
-nb_iter = 3
+############################### TEST ##############################################################
+
+j_ = 0 #np.random.randint(3,Npts-1001)
+nb_iter = 3000
 count_init   = int(TIME / DT)  
 n_steps_first = count_init % N_fs  
-series = np.zeros((n,nb_iter)).T
-series[0,:] = Data_shell[j_,:]
-series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
+# series = np.zeros((n,nb_iter)).T
+# series[0,:] = Data_shell[j_,:]
+# series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
 
 
 
 # for k in range(2,nb_iter):
-#     x_past = series[k-1:k,:].copy()
+#     x_past = series[k-2:k,:].copy()
     
-#     _,_,cur_Xp,cur_Yp = m_b(x_past,N_fs=999,n_steps_first=99,custom=True)
+#     _,_,cur_Xp,cur_Yp =m_step(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2],Xp=x_past[1,0::2],Yp=x_past[1,1::2])#m_b(x_past,N_fs=999,n_steps_first=99,custom=True) #
 #     series[k, 0::2] = cur_Xp.copy()
 #     series[k, 1::2] = cur_Yp.copy()
 #     # print("serie:",series[k,0:2])
 
 # Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
 
+# print(Rmse)
+# print(j_)
+
 # plt.figure()
 
 # for i in range(5):
 #      #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
-#      plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}")
-#      plt.plot(Data_shell[j_:j_+nb_iter,2*i],label=f"shell_reel_{2*i}")
+#      plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}",alpha=0.5)
+#      plt.plot(Data_shell[j_:j_+nb_iter,2*i],'--',label=f"shell_reel_{2*i}")
 #      plt.legend()
 #      plt.show()
 # plt.savefig("test")
@@ -292,6 +317,9 @@ series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
 # for i in range(10):
 #      plt.plot(np.abs(base[2*i,:]-data[2*i,0:9999]))
 # plt.savefig("test_2")
+#####################################################################################################
+
+
 
 ### Generate observations and covariance
 def generate_observations(p, H):
@@ -305,7 +333,7 @@ def generate_observations(p, H):
 H = np.eye(44,44) #array([[1,0,0,0], [0,1,0,0]])
 H = H[2*k_min_collocation:2*k_max_collocation,:] # on observe que les modes de 5 à 10 avec Re et Im donc 12 variables d'observations
 
-
+y_obs = H @ Data_shell.T + np.random.multivariate_normal(np.zeros(p),R,size=(Npts,)).T
 
 ### Ensemble Kalman initialization
 Ne = 50                   # number of ensembles
@@ -320,16 +348,16 @@ x_f_enkf_tmp = np.zeros((n,Ne))
 y_f_enkf_tmp = np.zeros((p,Ne))
 # initial step
 
-ens_Xpp = np.zeros((Ne, n))
-ens_Ypp = np.zeros((Ne, n))
-ens_Xp  = np.zeros((Ne, n))
-ens_Yp  = np.zeros((Ne, n))
+ens_Xpp = np.zeros((Ne, int(n/2))) # tous les ensembles pour Xpp et Ypp == t-2
+ens_Ypp = np.zeros((Ne, int(n/2))) 
+ens_Xp  = np.zeros((Ne, int(n/2))) # tous les ensembles pour Xp et Yp == t-1
+ens_Yp  = np.zeros((Ne, int(n/2)))
 
 
-fens_Xpp = np.zeros((Ne, n))
-fens_Ypp = np.zeros((Ne, n))
-fens_Xp  = np.zeros((Ne, n))
-fens_Yp  = np.zeros((Ne, n))
+fens_Xpp = np.zeros((Ne, int(n/2))) # tous les ensembles pour Xpp et Ypp == t-2 apres intégration par le modèle
+fens_Ypp = np.zeros((Ne, int(n/2)))
+fens_Xp  = np.zeros((Ne, int(n/2))) # tous les ensembles pour Xp et Yp == t-1 apres intégration par le modèle
+fens_Yp  = np.zeros((Ne, int(n/2)))
 
 
 # condition initiales
@@ -345,15 +373,15 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 44
+nb = 10000
 for i in range(Ne):
     x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
     
-    noise = np.random.randn(n) * amp * 0.01   # perturbation 1%
-    ens_Xpp[i] = ref_Xpp + noise[0::2] * 0.1  # Xpp varie peu
-    ens_Ypp[i] = ref_Ypp + noise[1::2] * 0.1
-    ens_Xp[i]  = ref_Xp  + noise[0::2]
-    ens_Yp[i]  = ref_Yp  + noise[1::2]
+    #noise = np.random.randn(n) * amp * 0.01   # perturbation 1%
+    ens_Xpp[i] = ref_Xpp + np.random.multivariate_normal(x_0, P_0)[0::2] #+ noise[0::2] * 0.1  # Xpp varie peu
+    ens_Ypp[i] = ref_Ypp + np.random.multivariate_normal(x_0, P_0)[1::2] #+ noise[1::2] * 0.1
+    ens_Xp[i]  = ref_Xp  + np.random.multivariate_normal(x_0, P_0)[0::2] #+ noise[0::2]
+    ens_Yp[i]  = ref_Yp  + np.random.multivariate_normal(x_0, P_0)[1::2] #+ noise[1::2]
 
 x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
 P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
@@ -372,8 +400,8 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
 
         x_f_enkf_tmp[0::2,i] = Xp_n.T
         x_f_enkf_tmp[1::2,i] = Yp_n.T
-        _,_,forward_x,forward_y  = m_b(x_a_enkf_tmp[:,i].T,N_fs=999,n_steps_first=998,custom=True)
-        x_f_enkf_tmp[0::2,i],x_f_enkf_tmp[1::2,i] = forward_x.T,forward_y.T ### A CACHER
+        #_,_,forward_x,forward_y  = m_b(x_a_enkf_tmp[:,i].T,N_fs=999,n_steps_first=998,custom=True)
+        #x_f_enkf_tmp[0::2,i],x_f_enkf_tmp[1::2,i] = forward_x.T,forward_y.T ### A CACHER
         x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)
         y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
     

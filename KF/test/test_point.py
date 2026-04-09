@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 model = GoyModel(force_rnd=0)
 
-ref = np.loadtxt("/home/s26calme/Documents/code_stage/GOY-main/data_test_precis.dat")
+ref = np.loadtxt("/home/s26calme/Documents/code_stage/GOY-main/data_test_precis.dat",dtype=np.float32)
 
 def init(x_past,N_fs,n_steps_first):
     # ── choix du point de départ ──────────────────────────────────────────────────
@@ -40,7 +40,7 @@ def init(x_past,N_fs,n_steps_first):
 i=5000
 N_fs          = 999
 Xpp,Ypp,Xp,Yp = init(ref[i-2:i],N_fs=N_fs,n_steps_first=100)
-n_pred = 10  
+n_pred = 10000 
 # ── vérification que Xp coïncide bien avec ref[i] ────────────────────────────
 print(f"Vérification ligne {i}:")
 print(f"  |Xp - ref[i]|_max = {np.max(np.abs(Xp - ref[i, 0::2])):.3e}")

@@ -20,7 +20,7 @@ FORCE     = 0.005
 N_FORCE   = 4
 FORCE_RND = 0
 
-REF_FILE  = "/home/s26calme/Documents/code_stage/GOY-main/data_test.dat"
+REF_FILE  = "/home/s26calme/Documents/code_stage/GOY-main/data_test_precis.dat"
 
 # ── replication exacte des calculs entiers du code C ─────────────────────────
 count_init   = int(TIME / DT)           # 99999999
@@ -63,11 +63,11 @@ for i in range(1, N_rows):
 
 # ── comparaison avec le fichier de reference ──────────────────────────────────
 try:
-    ref = np.loadtxt(REF_FILE)
+    ref = np.loadtxt(REF_FILE,dtype=np.float64)
     
     diff_X = state[:, 0::2] - ref[:, 0::2]
     diff_Y = state[:, 1::2] - ref[:, 1::2]
-    for i in range(22):
+    for i in range(4):
         # plt.figure()
         # plt.plot(diff_X[:,i])
         # plt.plot(diff_Y[:,i])
