@@ -127,8 +127,8 @@ n     = 44 # state size  on veut estimer les Un de 1 à 22 avec Re et Im donc 44
 p     = 12 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
-var_Q = 0.01 # error variance of the model (in Kalman)
-var_R = 1 # error variance of the observations (in Kalman)
+var_Q = 0.0 # error variance of the model (in Kalman)
+var_R = 0.1 # error variance of the observations (in Kalman)
 #x_0   = np.zeros((n)) # initial coundition (mean)
 x_0   = np.zeros(n)#Data_shell[0,:] # initial coundition (mean) = première ligne du jeu de données
 P_0   = np.eye(n,n) # initial coundition (covariance)
@@ -336,10 +336,10 @@ def generate_observations(p, H):
 H = np.eye(44,44) #array([[1,0,0,0], [0,1,0,0]])
 H = H[2*k_min_collocation:2*k_max_collocation,:] # on observe que les modes de 5 à 10 avec Re et Im donc 12 variables d'observations
 
-i_nan = np.random.choice(Npts, size=int(0.5*Npts), replace=False) # indices des observations à supprimer
+i_nan = np.random.choice(Npts, size=int(0.8*Npts), replace=False) # indices des observations à supprimer
 
 y_obs = H @ Data_shell.T + np.random.multivariate_normal(np.zeros(p),R,size=(Npts,)).T
-y_obs[:,i_nan] = y_obs[:,i_nan]*np.nan
+#y_obs[:,i_nan] = y_obs[:,i_nan]*np.nan
 
 # tiré des temps au hasard pour enlever des observations 
 
@@ -352,10 +352,11 @@ y_obs[:,i_nan] = y_obs[:,i_nan]*np.nan
 #     plt.xlabel('Time')
 #     plt.ylabel("y_obs vs true state")
 #     plt.legend()
-#     plt.savefig(SAVE + f"obs_true_state_{i}")
+# plt.show()
+    #plt.savefig(SAVE + f"obs_true_state_{i}")
 
 ### Ensemble Kalman initialization
-Ne = 50                   # number of ensembles
+Ne = 100                   # number of ensembles
 x_f_enkf = np.zeros((n,nb))   # forecast state
 P_f_enkf = np.zeros((n,n,nb)) # forecast error covariance matrix
 x_a_enkf = np.zeros((n,nb))   # analysed state
@@ -424,7 +425,8 @@ P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
 #     plt.ylabel('Xp and Yp')
 #     plt.legend()
 #     plt.savefig(SAVE + f"xy_start_enKF_{j}")
-
+lmb = 0.2
+g = np.zeros(n)
 for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # prediction step
     # il faut un initialisation custom pour chaque Ne
@@ -443,9 +445,9 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
         #_,_,forward_x,forward_y  = m_b(x_a_enkf_tmp[:,i].T,N_fs=999,n_steps_first=998,custom=True)
         #x_f_enkf_tmp[0::2,i],x_f_enkf_tmp[1::2,i] = forward_x.T,forward_y.T ### A CACHER
         # Modèle supposé parfait ==> pas de bruit du modèle
-        x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)
+        #x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)
 
-        y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
+        y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] - np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
     
     P_f_enkf_tmp = np.cov(x_f_enkf_tmp) ### A CACHER
     # Kalman gain
@@ -456,15 +458,29 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
         for i in range(Ne):
             x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
+        
+        # inflation multiplicative
+        P_a_tilde = (np.eye(n) - K_g @ H) @ P_f_enkf_tmp ### A CACHER
+        mu_n = np.mean(x_a_enkf_tmp, axis=1) ### A CACHER
+
+        for j in range(n):
+                g[j] = max(1,1+lmb*(P_a_enkf_tmp[j,j]-P_a_tilde[j,j])/P_a_enkf_tmp[j,j]) # terme d'inflation multiplicative pour chaque variable d'état ### A CACHER
+        
+        x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
+        P_f_enkf[:,:,k] = P_f_enkf_tmp
+        x_a_enkf[:,k]   = g*np.mean(x_a_enkf_tmp,1) + (1-g)*mu_n
+        P_a_enkf[:,:,k] = P_a_enkf_tmp
+        # U_tilde = g*U_tilde + (1-g)*mu_n[:,None] 
+
     else:
             #x_a_enkf_tmp[:,:,0] = x_a_enkf_tmp[:,:,1]
             x_a_enkf_tmp = x_f_enkf_tmp
             P_a_enkf_tmp = P_f_enkf_tmp 
     # store results
-    x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
-    P_f_enkf[:,:,k] = P_f_enkf_tmp
-    x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1)
-    P_a_enkf[:,:,k] = P_a_enkf_tmp
+            x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
+            P_f_enkf[:,:,k] = P_f_enkf_tmp
+            x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1)
+            P_a_enkf[:,:,k] = P_a_enkf_tmp
 
 
 ### plot trajectories (true, observed, KF, EnKF)
