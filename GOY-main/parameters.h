@@ -19,7 +19,7 @@
 /****************************************************************************/
 // scheme parameters:
 #define dt 1.e-5    // for integration scheme 
-#define fs 100// for data saving
+#define fs 9999// for data saving
 #define time 1000. // for data saving (you'll get Npts = time*fs per simulation)
 
 /****************************************************************************/
@@ -35,7 +35,7 @@
 
 #define MOMENTS_ORDER_MAX 6             // max order of the moments to compute
 #define MOMENTS_FILE "moments.dat"      // file name for the moments
-#define DATA_FILE "data_test_precis.dat"            // where to save the main output (shells) (from DO_SAVE )
+#define DATA_FILE "data_enKF_100dt.dat"            // where to save the main output (shells) (from DO_SAVE )
 #define RECONSTRUCTED_FILE "v.dat"      // reconstructed velocity field (from DO_RECONSTRUCT)
 #define STATS_DIR "stats"               // where to save additional stats
 #define DATA_DIR "."                    // where to save data

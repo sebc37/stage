@@ -51,9 +51,8 @@ def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
 
 
 
-
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test_precis.dat"
+path_data = PATH + "data_enKF_100dt.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF/"
 
 data =  np.loadtxt(path_data,dtype=np.float64) # charge le jeu de données
@@ -86,12 +85,14 @@ K = np.array([k0*lmb**i for i in range(22)],dtype=np.float32)
 
 Tn = np.zeros(22)
 for n in range(22):
-    Tn[n] = 1/(K[n]*np.sqrt(np.mean(Data_shell[:,2*n]**2 + Data_shell[:,2*n+1]**2))) # énergie de chaque shell dans les données
+    Tn[n] = 1/(K[n]*np.sqrt((np.mean(np.sqrt(Data_shell[:,2*n]**2 + Data_shell[:,2*n+1]**2)**2))))
+
+Tn = Tn**2 # énergie de chaque shell dans les données
 plt.figure()
-plt.plot(Tn,'*')
+plt.plot(Tn,'.b')
 plt.xlabel('Shell number')
 plt.ylabel('Turnover time')
-plt.show()
+plt.savefig(SAVE + "Turnover_times.png",format='png',dpi=400)
 print("Turnover times:",min(Tn),max(Tn))
 # for i in range(np.shape(y_obs)[0]):
 #     plt.figure()
@@ -106,7 +107,7 @@ MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2 ) for k in range(0,44,2)])
 
 ### parameters
 n     = 44 # state size  on veut estimer les Un de 1 à 22 avec Re et Im donc 44 variables d'état
-p     = 6 # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
+p     = 2*(k_max_collocation-k_min_collocation + 1) # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
 nb    = Npts # number of times
 time  = np.array(range(nb)) # time vector
 var_Q = 0.0 # error variance of the model (in Kalman)
@@ -156,7 +157,7 @@ a = y_obs_.copy()
 ######### paramètres du modèle pour l'intégration #############################
 TIME      = 1000.
 DT        = 1e-5
-FS        = 100.
+FS        = 999.
 FORCE     = 0.005
 N_FORCE   = 4
 FORCE_RND = 0
@@ -294,7 +295,7 @@ x_f_enkf = np.zeros((n,nb))   # forecast state
 P_f_enkf = np.zeros((n,n,nb)) # forecast error covariance matrix
 x_a_enkf = np.zeros((n,nb))   # analysed state
 P_a_enkf = np.zeros((n,n,nb)) # analysed error covariance matrix
-
+P_a_tilde = np.zeros((n,n,nb)) # analysed error covariance matrix après inflation multiplicative
 ### Ensemble Kalman filter
 x_a_enkf_tmp = np.zeros((n,Ne)) # shell,t-2 t-1, Ne
 x_f_enkf_tmp = np.zeros((n,Ne))
@@ -326,7 +327,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 100
+nb = 30000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -334,9 +335,9 @@ for i in range(Ne):
     #noise = np.random.randn(n) * amp * 0.01   # perturbation 1%
     ens_Xpp[i] = cur_Xpp #+ np.random.multivariate_normal(x_0, P_0)[0::2] #+ noise[0::2] * 0.1  # Xpp varie peu
     ens_Ypp[i] = cur_Ypp #+ np.random.multivariate_normal(x_0, P_0)[1::2] #+ noise[1::2] * 0.1
-    ens_Xp[i]  = cur_Xp  + np.random.multivariate_normal(x_0, P_0)[0::2] #np.sqrt(cur_Xp**2 + cur_Yp**2)*np.cos(np.random.random()*2*np.pi)  #
-    ens_Yp[i]  = cur_Yp + np.random.multivariate_normal(x_0, P_0)[1::2] #np.sqrt(cur_Xp**2 + cur_Yp**2)*np.sin(np.random.random()*2*np.pi) #
-    x_a_enkf_tmp[0::2,i] = ens_Xp[i].T
+    ens_Xp[i]  = cur_Xp  + np.random.multivariate_normal(x_0, P_0)[0::2] # np.sqrt(Data_shell[1,0::2]**2 )*np.cos(np.random.random()*2*np.pi)
+    ens_Yp[i]  = cur_Yp + np.random.multivariate_normal(x_0, P_0)[1::2] #np.sqrt(Data_shell[1,1::2]**2)*np.sin(np.random.random()*2*np.pi) # 
+    x_a_enkf_tmp[0::2,i] = ens_Xp[i].T 
     x_a_enkf_tmp[1::2,i] = ens_Yp[i].T
 
 x_a_enkf[:,0]   = np.mean(x_a_enkf_tmp,1) # initial state
@@ -361,7 +362,7 @@ P_a_enkf[:,:,0] = np.cov(x_a_enkf_tmp)    # initial state covariance
 #     plt.ylabel('Xp and Yp')
 #     plt.legend()
 #     plt.savefig(SAVE + f"xy_start_enKF_{j}")
-lmb = 0.2
+lmb_inf = 0.2
 g = np.zeros((n,nb))
 for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # prediction step
@@ -383,7 +384,7 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
         # Modèle supposé parfait ==> pas de bruit du modèle
         #x_f_enkf_tmp[:,i] += np.random.multivariate_normal(np.zeros(n), Q)
                                             # c'est un moins dans le papier à verifier
-        y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] + np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
+        y_f_enkf_tmp[:,i] = H @ x_f_enkf_tmp[:,i] - np.random.multivariate_normal(np.zeros(p), R) ### A CACHER
     
     ens_Xpp = fens_Xpp
     ens_Ypp = fens_Ypp
@@ -401,11 +402,11 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
         
         # inflation multiplicative
-        #P_a_tilde = (np.eye(n) - K_g @ H) @ P_f_enkf_tmp ### A CACHER
+        P_a_tilde[:,:,k] = (np.eye(n) - K_g @ H) @ P_f_enkf_tmp ### A CACHER
         mu_n = np.mean(x_a_enkf_tmp, axis=1) ### A CACHER
 
         for j in range(n):
-                g[j,k] = max(1,1+lmb*(P_f_enkf_tmp[j,j]-P_a_enkf_tmp[j,j])/P_f_enkf_tmp[j,j]) # terme d'inflation multiplicative pour chaque variable d'état ### A CACHER
+                g[j,k] = max(1,1+lmb_inf*(P_f_enkf_tmp[j,j]-P_a_tilde[j,j,k])/P_f_enkf_tmp[j,j]) # terme d'inflation multiplicative pour chaque variable d'état ### A CACHER
         
         x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
         P_f_enkf[:,:,k] = P_f_enkf_tmp
@@ -425,10 +426,10 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
 
 
 ### plot trajectories (true, observed, KF, EnKF)
-for i in range(N-9):
+for i in range(N):
     if (i>=k_min_collocation-1) and (i<k_max_collocation):
         plt.figure()
-        plt.fill_between(time[0:nb], x_a_enkf[2*i,0:nb] - 1.96*np.sqrt(P_a_enkf[2*i,2*i,0:nb]), x_a_enkf[2*i,0:nb] + 1.96*np.sqrt(P_a_enkf[2*i,2*i,0:nb]), facecolor='red', alpha=0.4)
+        plt.fill_between(time[0:nb], x_a_enkf[2*i,0:nb] - 1.96*np.sqrt(P_a_tilde[2*i,2*i,0:nb]), x_a_enkf[2*i,0:nb] + 1.96*np.sqrt(P_a_tilde[2*i,2*i,0:nb]), facecolor='red', alpha=0.4)
         
         plt.plot(y_obs[2*i-2*(k_min_collocation-1),0:nb], '.k',alpha=0.3, label=f'Observations ($y {i+1}$)')
         plt.plot(x_a_enkf[2*i,0:nb], 'r', label=f'EnKF ($U^a {i+1}$)')
@@ -436,23 +437,23 @@ for i in range(N-9):
         plt.xlabel('$time$')
         plt.ylabel(f'$\Re(U_{i+1})$')
         plt.legend()
-        #plt.savefig(SAVE + f"fig1enKF_{i}")
+        
     else:
         plt.figure()
-        plt.fill_between(time[0:nb], x_a_enkf[2*i,0:nb] - 1.96*np.sqrt(P_a_enkf[2*i,2*i,0:nb]), x_a_enkf[2*i,0:nb] + 1.96*np.sqrt(P_a_enkf[2*i,2*i,0:nb]), facecolor='red', alpha=0.4)
-        plt.plot(x_a_enkf[2*i,0:nb], 'r', label=f'EnKF ($U^a {i+1}$)')
+        plt.fill_between(time[0:nb], x_a_enkf[2*i,0:nb] - 1.96*np.sqrt(P_a_tilde[2*i,2*i,0:nb]), x_a_enkf[2*i,0:nb] + 1.96*np.sqrt(P_a_tilde[2*i,2*i,0:nb]), facecolor='red', alpha=0.4)
+        plt.plot(x_a_enkf[2*i,0:nb], 'r', label=f'EnKF ($U^a_{i+1}$)')
         plt.plot(Data_shell.T[2*i,j_start:nb+j_start], 'b', label=f'True state ($U_{i+1}$)')
         plt.xlabel('$time$')
         plt.ylabel(f'$ \Re(U_{i+1})$')
         plt.legend()
-    
+    plt.savefig(SAVE + f"fig1enKF_{i}.png",format='png',dpi=400)
     # plt.figure()
     # plt.plot(time[0:nb],g[i,0:nb],label=f'inflation factor g for variable $U_{i//2}$')
     # plt.xlabel('time')
     # plt.ylabel('g')
     # plt.legend()
         #plt.savefig(SAVE + f"fig1enKF_{i}")
-plt.show()
+
 
 ### plot state variables
 # plt.figure()
@@ -469,4 +470,11 @@ plt.show()
 # plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
 print('RMSE(obs):', np.sqrt(np.mean((y_obs[:,0:nb] - Data_shell.T[range(2*(k_min_collocation-1),2*k_max_collocation,1),0:nb])**2))) ### A CACHER
-print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2))) 
+
+print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1))) 
+
+plt.figure()
+plt.plot([i for i in range(n)], np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1)), marker='o')
+plt.xlabel('shell number')
+plt.ylabel('RMSE')
+plt.savefig(SAVE + "RMSE_enKF.png",format='png',dpi=400)
