@@ -1,3 +1,4 @@
+import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -8,6 +9,13 @@ torch.manual_seed(119)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 PATH = ""
 
+list_of_datasets = glob.glob(PATH+"dataset_*.npy")
+
+# faire différent dataset : parti facile de l'attracteur et point d'equilibre 
+# regarder avec des (ti,xi,yi,zi) qui predise des(xj,yj,zj) avec j>i
+# faire une fonction closure pour LBFGS
+
+
 
 #############################
 # modèle lorenz 63 avec RK4 #
@@ -16,14 +24,18 @@ nb    = 1000 # number of times
 n=3
 time  = np.array(range(nb))
 
+sigma=10
+rho=28
+beta=8/3
+
 ### define the nonlinear dynamic system (Lorenz-63) using the Runge-Kutta integration method
-def m(x_past):
+def m(x_past,dT,sigma,rho,beta):
     
     # physical parameters
-    dT=0.01
-    sigma=10
-    rho=28
-    beta=8/3
+    # dT=0.01
+    # sigma=10
+    # rho=28
+    # beta=8/3
     
     # Runge-Kutta (4,5) integration method
     X1 = np.copy(x_past)
@@ -53,17 +65,57 @@ def m(x_past):
     return x_future
 
 
-x = np.zeros((n,nb))
-x[:,0] = np.array([8,0,30])
+def make_dataset(nb,n,CI,dT,sigma,rho,beta,name):
 
-for t in range(1,nb):
-    x[:,t] = m(x[:,t-1])
+    x = np.zeros((n,nb))
+    x[:,0] = CI
+    for t in range(1,nb):
+        x[:,t] = m(x[:,t-1],dT,sigma,rho,beta)
+    
+    if PATH+f"dataset_{name}_LR63.npy" not in list_of_datasets:
+        np.save(PATH+f"dataset_{name}_LR63.npy",x)
+    return 0
 
+make_dataset(nb=27000,n=n,CI=np.array([8,0,30]),dT=1e-3,sigma=10,rho=28,beta=8/3,name="long_attractor")
+for i in range(3):
+    make_dataset(nb=3000,n=n,CI=np.array([0,0,0])+np.random.rand(3)*0.01,dT=1.e-3,sigma=10,rho=28,beta=8/3,name=f"zero_attractor_{i}")
+    make_dataset(nb=3000,n=n,CI=np.array([-np.sqrt(beta*(rho-1)),-np.sqrt(beta*(rho-1)),rho-1])+np.random.rand(3)*0.01,dT=1.e-3,sigma=10,rho=28,beta=8/3,name=f"equil_{i}")
+    make_dataset(nb=3000,n=n,CI=np.array([np.sqrt(beta*(rho-1)),np.sqrt(beta*(rho-1)),rho-1])+np.random.rand(3)*0.01,dT=1.e-3,sigma=10,rho=28,beta=8/3,name=f"equilibrium_{i}")
+for i in range(9):
+    make_dataset(nb=9000,n=n,CI=np.array([8,0,30])+np.random.rand(3)*0.01,dT=1.e-3,sigma=10,rho=28,beta=8/3,name=f"short_attractor_{i}")
 
+# x = np.zeros((n,nb))
+# x[:,0] = np.array([8,0,30])
 
+# for t in range(1,nb):
+#     x[:,t] = m(x[:,t-1])
+easy_dataset = [p for p in list_of_datasets if(('zero' in p) or ('equil' in p)) ]
+medium_dataset = [p for p in list_of_datasets if('short' in p)]
+hard_dataset = [p for p in list_of_datasets if('long' in p)]
+
+def plot_attractor(p):
+    x = np.load(PATH+p)
+    xyzs = x.T
+    ax = plt.figure().add_subplot(projection='3d')
+
+    ax.plot(*xyzs.T, lw=0.5)
+    ax.set_xlabel("X Axis")
+    ax.set_ylabel("Y Axis")
+    ax.set_zlabel("Z Axis")
+    ax.set_title(f"Lorenz Attractor {p.split('.')[0]}")
+
+    plt.show()
+
+list_of_datasets = glob.glob(PATH+"dataset_*.npy")
+
+for p in list_of_datasets:
+    plot_attractor(p)
 #################################################
 # Dataset LR63 avec BC, IC, Collocation points  #
 #################################################
+
+
+
 
 x_bc = x[0,:]
 x_ic = x[:,0]
@@ -181,15 +233,19 @@ def grad(y, t):
 
 class Train_PINN():
 
-    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3):
+    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,optim):
         self.learning_rate = learning_rate
         self.nbr_iteration = nbr_iteration
         self.w_1 = w_1
         self.w_2 = w_2
         self.w_3 = w_3
-        self.optimizer = torch.optim.Adam(model.parameters(),lr = self.learning_rate)
         
-    def train(self):
+        if type(optim) != None:
+            self.optimizer = optim
+        else:
+            self.optimizer = torch.optim.Adam(model.parameters(),lr = self.learning_rate)
+        
+    def train(self,*dataset):
         
         loss = np.zeros((self.nbr_iteration,1))
         loss_bc_tracker = np.zeros((self.nbr_iteration,1))
@@ -211,6 +267,7 @@ class Train_PINN():
             # u_pd_bou = model(boundary_train_data[:,0:2][0].to(device))
             # u_exa_bou = boundary_train_data[:,2:3][0].to(device)
             # loss_boundary_conditions = self.w_2*torch.mean((u_pd_bou-u_exa_bou)**2)
+            
             t = T.unsqueeze(-1).requires_grad_().to(device)
             u_pd_all = model(t)
             u_exa_all = X_ALL.mT.to(device)
@@ -247,7 +304,7 @@ class Train_PINN():
             #loss_cl_tracker[iteration] = loss_collocation_conditions.cpu().detach().numpy()
             loss_phy_tracker[iteration] = loss_physics.cpu().detach().numpy()
             #loss_ic_tracker[iteration] = loss_initital_conditions.cpu().detach().numpy()
-        return loss,loss_ic_tracker,loss_bc_tracker,loss_cl_tracker,loss_phy_tracker
+        return loss,loss_ic_tracker,loss_bc_tracker,loss_cl_tracker,loss_phy_tracker,self.optimizer.state_dict()
 
 
 #u_t = torch.autograd.grad(u_pd, grid_train_data, torch.ones_like(u_pd), create_graph=True)[0][:,1:2].to(device)
@@ -261,10 +318,48 @@ model.to(device)
 lr = 1.0e-4
 nb_iter = 1000
 t =Train_PINN(learning_rate=lr,nbr_iteration=nb_iter,w_1=1,w_2=1,w_3=1)
-l,li,lb,lc,lp =  t.train()
+l,li,lb,lc,lp,dict_optim =  t.train()
 
 U_pred = model(T.unsqueeze(-1).to(device))
 U = U_pred.view((n,nb)).mT.cpu().detach().numpy()
+
+#################
+# loop training #
+#################
+
+# séparer les dataset 
+
+easy_dataset = [p for p in list_of_datasets if(('zero' in p) or ('equil' in p)) ]
+medium_dataset = [p for p in list_of_datasets if('short' in p)]
+hard_dataset = [p for p in list_of_datasets if('long' in p)]
+
+for p in list_of_datasets:
+    
+    # training on each type of dataset
+    #t = Train_PINN(nbr_iteration=nb_iter,optim=)
+
+
+    torch.save({
+            'epoch': nb_iter,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': dict_optim,
+            'loss': l,
+            
+            }, PATH + "model_save")
+
+
+################
+# saving model #
+################
+
+torch.save({
+            'epoch': nb_iter,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': dict_optim,
+            'loss': l,
+            
+            }, PATH + "model_save")
+
 
 
 #############
