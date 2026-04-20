@@ -332,8 +332,15 @@ U = U_pred.view((n,nb)).mT.cpu().detach().numpy()
 easy_dataset = [p for p in list_of_datasets if(('zero' in p) or ('equil' in p)) ]
 medium_dataset = [p for p in list_of_datasets if('short' in p)]
 hard_dataset = [p for p in list_of_datasets if('long' in p)]
+datasets_list = [easy_dataset,medium_dataset,hard_dataset]
+for dataset in datasets_list:
+    
+    D = []
+    for l in dataset:
+        D.append(torch.tensor(np.load(PATH + l),dtype=torch.float64,requires_grad=True))
 
-for p in list_of_datasets:
+    
+    t = Train_PINN(..., dataset=D)
     
     # training on each type of dataset
     #t = Train_PINN(nbr_iteration=nb_iter,optim=)
