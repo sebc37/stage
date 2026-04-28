@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 import  architecture
 import tqdm
+from tqdm import contrib
 
 torch.manual_seed(119)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -66,15 +67,16 @@ def m(x_past,dT,sigma,rho,beta):
 
 
 def make_dataset(nb,n,CI,dT,sigma,rho,beta,name):
-
-    x = np.zeros((n,nb))
-    x[:,0] = CI
-    for t in range(1,nb):
-        x[:,t] = m(x[:,t-1],dT,sigma,rho,beta)
     
     if PATH+f"dataset_{name}_LR63.npy" not in list_of_datasets:
+        x = np.zeros((n,nb))
+        x[:,0] = CI
+        for t in range(1,nb):
+            x[:,t] = m(x[:,t-1],dT,sigma,rho,beta)
+        
+        
         np.save(PATH+f"dataset_{name}_LR63.npy",x)
-    return 0
+        return 0
 
 make_dataset(nb=27000,n=n,CI=np.array([8,0,30]),dT=1e-3,sigma=10,rho=28,beta=8/3,name="long_attractor")
 for i in range(3):
@@ -108,14 +110,15 @@ def plot_attractor(p):
 
 list_of_datasets = glob.glob(PATH+"dataset_*.npy")
 
-for p in list_of_datasets:
-    plot_attractor(p)
+list_dt = [1e-3 for i in range(len(list_of_datasets))]
+# for p in list_of_datasets:
+#     plot_attractor(p)
 #################################################
 # Dataset LR63 avec BC, IC, Collocation points  #
 #################################################
 
 
-
+x = np.load(easy_dataset[0])
 
 x_bc = x[0,:]
 x_ic = x[:,0]
@@ -198,9 +201,9 @@ def loss_phy(x,y,z,T):
     # dx = dxyz[:,0:1]
     # dy = dxyz[:,1:2]
     # dz = dxyz[:,2:3]
-    dx = grad(x,T)
-    dy = grad(y,T)
-    dz = grad(z,T)
+    dx = grad(x,T).unsqueeze(-1)
+    dy = grad(y,T).unsqueeze(-1)
+    dz = grad(z,T).unsqueeze(-1)
 
     res_x = dx - sigma*(y-x)
     res_y = dy - (x*(rho-z) - y)
@@ -233,19 +236,21 @@ def grad(y, t):
 
 class Train_PINN():
 
-    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,optim):
+    def __init__(self,learning_rate,nbr_iteration,w_1,w_2,w_3,optim,datasets,dts):
         self.learning_rate = learning_rate
         self.nbr_iteration = nbr_iteration
         self.w_1 = w_1
         self.w_2 = w_2
         self.w_3 = w_3
+        self.datasets=datasets
+        self.dts = dts
         
-        if type(optim) != None:
-            self.optimizer = optim
-        else:
-            self.optimizer = torch.optim.Adam(model.parameters(),lr = self.learning_rate)
+        # if type(optim) != None:
+        #     self.optimizer = optim
+        # else:
+        self.optimizer = torch.optim.Adam(model.parameters(),lr = self.learning_rate)
         
-    def train(self,*dataset):
+    def train(self):
         
         loss = np.zeros((self.nbr_iteration,1))
         loss_bc_tracker = np.zeros((self.nbr_iteration,1))
@@ -253,8 +258,72 @@ class Train_PINN():
         loss_cl_tracker = np.zeros((self.nbr_iteration,1))
         loss_phy_tracker = np.zeros((self.nbr_iteration,1))
 
+        list_dataset = []
+        list_dataloader = []
+        
+        # for d,t in zip(dataset,dt):
+        #     list_dataset.append(architecture.Lorenz_Dataset(d,t))
+        
+        # for dat in list_dataset:
+        #     list_dataloader.append(architecture.DataLoader(dat,batch_size=dat.__len__()/10,shuffle=True))
+        liste_dataset= [architecture.Lorenz_Dataset(self.datasets[0][i],self.dts[i],10) for i in range(len(self.datasets[0]))]
+        #dataset_easy = torch.utils.data.StackDataset(l)
+        #temps,xyz = l[0][2997]
+        liste_dataloader = [architecture.DataLoader(elm,batch_size=10,shuffle=True) for elm in liste_dataset]
+
+
+        #dataloader_test = architecture.DataLoader(l[0],batch_size=10,shuffle=True)
+        
+       
+
+        # for i in range(10):
+        #     temps,xyz = next(iter(dataloader_test))
+            
+        # data =[]
+        #data = architecture.DataLoader(dataset_easy,batch_sampler=torch.utils.data.SequentialSampler(dataset_easy.datasets[0]))
+        #data = architecture.DataLoader(architecture.Multilple_Lorenz(self.datasets,self.dts,900))
+
         for iteration in tqdm.tqdm(range(self.nbr_iteration)):
             self.optimizer.zero_grad()
+            #index = int(np.random.random*len(list_dataloader))
+            
+            loss_batch=0
+            loss_batch_phy = 0
+            loss_ic = 0
+            c = 0
+            for dataloader in liste_dataloader:
+                
+                for idx,d in tqdm.contrib.tenumerate(dataloader):
+                    ic = liste_dataset[c]
+                    data_ic = ic[0][1][0,:]
+                    times = d[0].requires_grad_(True)
+                    xyzs = d[1]#.unsqueeze(-1)
+                    u_pred = model(times.unsqueeze(-1))
+                    loss_batch = torch.mean((u_pred-xyzs)**2)
+                    loss_batch_phy = loss_phy(x=u_pred[:,:,0:1],y=u_pred[:,:,1:2],z=u_pred[:,:,2:3],T=times)/n
+                    total_loss_batch = loss_batch + loss_batch_phy
+                    total_loss_batch.backward()
+                    self.optimizer.step()
+            #         for t,xyz in tqdm.contrib.tzip(times,xyzs):
+            #             t = t.unsqueeze(-1).requires_grad_().to(device)
+            #             u_ic_pred = model(torch.tensor([0,0,0],dtype=torch.float32).unsqueeze(-1).to(device))
+            #             u_exact = xyz.to(device)
+            #             u_pred = model(t)
+            #             loss_ic = loss_ic + torch.mean((u_ic_pred-data_ic)**2)/n
+            #             loss_batch = loss_batch + (torch.mean((u_exact-u_pred)**2))/10 # mettre 10 en paramètre
+            #             loss_batch_phy = loss_batch_phy + (loss_phy(x=u_pred[:,0:1],y=u_pred[:,1:2],z=u_pred[:,2:3],T=t))/n
+            #     c+=1
+            # total_loss_batch = (loss_batch_phy/3000 + loss_batch/3000 + loss_ic/3000)/len(list_dataloader)
+            # total_loss_batch.backward()
+            # self.optimizer.step()
+
+            
+            # for idx,dataload in enumerate(data):
+            #     print(idx)
+            #     print(dataload)
+            #     for id,sample in enumerate(dataload[0]):
+            #         print(id)
+            #         print(sample)
 
             # #initial conditions Loss
             # initial_train_data = torch.cat((T_IC,X_IC.unsqueeze(0))).mT.to(device)#torch.tensor(initial_train_dataset)
@@ -308,6 +377,11 @@ class Train_PINN():
 
 
 #u_t = torch.autograd.grad(u_pd, grid_train_data, torch.ones_like(u_pd), create_graph=True)[0][:,1:2].to(device)
+easy_dataset = [p for p in list_of_datasets if(('zero' in p) or ('equil' in p)) ]
+medium_dataset = [p for p in list_of_datasets if('short' in p)]
+hard_dataset = [p for p in list_of_datasets if('long' in p)]
+datasets_list = [easy_dataset,medium_dataset,hard_dataset]
+
 #############
 #   modèle  #
 # ###########            
@@ -317,7 +391,7 @@ model.to(device)
 
 lr = 1.0e-4
 nb_iter = 1000
-t =Train_PINN(learning_rate=lr,nbr_iteration=nb_iter,w_1=1,w_2=1,w_3=1)
+t =Train_PINN(learning_rate=lr,nbr_iteration=nb_iter,w_1=1,w_2=1,w_3=1,optim=None,datasets=datasets_list,dts=list_dt)
 l,li,lb,lc,lp,dict_optim =  t.train()
 
 U_pred = model(T.unsqueeze(-1).to(device))
@@ -329,10 +403,7 @@ U = U_pred.view((n,nb)).mT.cpu().detach().numpy()
 
 # séparer les dataset 
 
-easy_dataset = [p for p in list_of_datasets if(('zero' in p) or ('equil' in p)) ]
-medium_dataset = [p for p in list_of_datasets if('short' in p)]
-hard_dataset = [p for p in list_of_datasets if('long' in p)]
-datasets_list = [easy_dataset,medium_dataset,hard_dataset]
+
 for dataset in datasets_list:
     
     D = []

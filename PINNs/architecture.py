@@ -168,6 +168,38 @@ class grid_data(Dataset): # créer la grille sur laquelle on veut inferer U(k,t)
         #print(f'idx {idx}')
         return self.grid[idx,0],self.grid[idx,1],idx  # This class only returns the x and t values of the grid not the velocity
 
+class Lorenz_Dataset(Dataset):
+    def __init__(self,path_data,dt,n):
+        
+        self.data = torch.tensor(np.load(path_data),dtype=torch.float32).H
+        self.time = torch.arange(0,self.data.shape[0]*dt,dt,dtype=torch.float32)
+        self.slices = int(len(self.time)/n) 
+
+    def __len__(self):
+        return(len(self.time))
+    
+    def __getitem__(self, idx):
+
+        if idx + self.slices> self.__len__():
+            idx = idx-1 - (self.slices - (self.__len__() - idx))
+        point = self.data[idx:idx + self.slices,:]
+        
+        return self.time[idx: idx + self.slices],point
+
+class Multilple_Lorenz(Dataset):
+    def __init__(self,paths,dts,b_size):
+        self.paths = paths
+        self.dts=dts
+        self.b_size = b_size
+    
+    def __len__(self):
+        return len(self.paths)
+    
+    def __getitem__(self, idx):
+        data = Lorenz_Dataset(self.paths[idx],self.dts[idx])
+        
+        return [DataLoader(data,batch_size=self.b_size,shuffle=True)]
+
 
 # calcul des loss
 
