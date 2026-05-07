@@ -37,18 +37,19 @@ T = 30
 t_full = np.arange(0.0, T, 0.01)
 ref    = scipy_odeint(f, [1.0, 1.0, 1.0], t_full)
 
-c=0
-a = 1000000
-for i in range(50):
-    a = np.mean(data[0][:,i]-ref[:,0])
-    data[0][:,i] = data[0][:,i]-ref[:,0]
-    if data[0][:,i]-ref[0] <= a:
-        c=i
+# c=0
+# a = 1000000
+# for i in range(50):
+#     a = np.mean(data[0][:,i]-ref[:,0])
+#     data[0][:,i] = data[0][:,i]-ref[:,0]
+#     if data[0][:,i]-ref[0] <= a:
+#         c=i
 
 plt.figure()
-plt.plot(data[0][:,i])
-plt.plot(data[1][:,i])
-plt.plot(data[3][:,i])
+
+plt.plot(data[0][:,-2])
+plt.plot(data[1][:,-2])
+plt.plot(data[3][:,-2])
 plt.show()
 
 

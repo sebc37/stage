@@ -67,19 +67,19 @@ class GoyModel:
 
     def __init__(self,
                  N=22,
-                 k0=0.125,
-                 lmb=2.0,
-                 eps=0.5,
-                 nu=1e-7,
-                 dt=1e-5,
-                 force=0.005,
+                 k0=np.float64(0.125),
+                 lmb=np.float64(2.0),
+                 eps=np.float64(0.5),
+                 nu=np.float64(1e-7),
+                 dt=np.float64(1e-5),
+                 force=np.float64(0.005),
                  N_force=4,
                  force_rnd=0,
                  lib_path=None):
 
         if N > 64:
             raise ValueError("N must be ≤ 64 (recompile goy_lib.c with larger N_MAX if needed)")
-
+        
         self.N   = N
         self.dt  = dt
         self._lmb = lmb
@@ -145,18 +145,18 @@ class GoyModel:
         sh = self._sh
         
         if type(Xpp)==type(None) and type(Ypp)==type(None):
-            Xpp = sh ** (-1.0 / 3.0)
+            Xpp = np.float64(sh ** (-1.0 / 3.0))
             Ypp = _np.full(self.N, 1e-4,dtype=np.float64)
         
 
         # need A[] – recompute here (stored in C side, replicate in Python)
-        A = _np.exp(-self._nu * sh**2 * self.dt)
+        A = _np.exp(-self._nu * sh**2 * self.dt,dtype=np.float64)
 
         # call lib to get NX/NY for one step (hack: integrate 1 step from same state,
         # but we only need NXpp → compute manually in Python with same formulas)
         lmb = self._lmb; eps = self._eps; N = self.N
-        A2 = _np.full(N, -eps/lmb)
-        A3 = _np.full(N, -(1-eps)/(lmb**2))
+        A2 = _np.full(N, -eps/lmb,dtype=np.float64)
+        A3 = _np.full(N, -(1-eps)/(lmb**2),dtype=np.float64)
 
         def _NX(ax, ay):
             res = _np.zeros(N,dtype=np.float64)
@@ -188,6 +188,9 @@ class GoyModel:
         NYpp = _NY(Xpp, Ypp)
         Xp = A * (Xpp + self.dt * NXpp)
         Yp = A * (Ypp + self.dt * NYpp)
+        
+        # NXp = _NX(Xp, Yp)
+        # NYp = _NY(Xp, Yp)
         # print(f"Xpp0 : {Xpp}")
         # print(f"Ypp0 : {Ypp}")
         # print(f"Xp : {Xp}")
@@ -250,21 +253,33 @@ class GoyModel:
 # ── quick self-test ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import time
-
-    model = GoyModel()
+    TIME      = 1000.
+    DT        = 1e-5
+    FS        = 100.
+    FORCE     = 0.005
+    N_FORCE   = 4
+    FORCE_RND = 0
+    N_fs      = int(1.0 / DT / FS)  
+    model = model = GoyModel(dt=DT, force=FORCE, N_force=N_FORCE, force_rnd=FORCE_RND)
     sh = model.shell_wavenumbers()
+    data = np.zeros((int((TIME+1)*FS),44),dtype=np.float64)
+    
 
-    Xpp = sh ** (-1.0 / 3.0)
-    Ypp = np.full(model.N, 1e-4)
-    Xp, Yp = Xpp.copy(), Ypp.copy()
-
-    print(f"Integrating {model.N} shells for 100 000 steps …")
+    Xpp, Ypp, Xp, Yp = model.init_fields()
+    print(f"Integrating {model.N} shells for 100100 steps …")
     t0 = time.perf_counter()
-    (Xp2, Yp2), (X2, Y2) = model.integrate(Xpp, Ypp, Xp, Yp, n_steps=100_000)
+    
+    for i in range(100100):
+        
+        (Xpp, Ypp), (Xp, Yp) = model.integrate(Xpp, Ypp, Xp, Yp, n_steps=N_fs)
+        data[i,0::2] = Xp
+        data[i,1::2] = Yp
     elapsed = time.perf_counter() - t0
-
+    
+    PATH = "/home/s26calme/Documents/code_stage/KF/"
+    np.save(PATH + "goy_lib_test.npy",data)
     print(f"Done in {elapsed:.3f} s")
-    print(f"X[0]  = {X2[0]:.6e}")
-    print(f"Xp[0] = {Xp2[0]:.6e}")
-    energy = 0.5 * np.sum(X2**2 + Y2**2)
+    print(f"X[0]  = {Xp[0]:.6e}")
+    print(f"Xp[0] = {Xpp[0]:.6e}")
+    energy = 0.5 * np.sum(Xp**2 + Yp**2)
     print(f"Total energy = {energy:.6e}")

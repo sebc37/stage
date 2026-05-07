@@ -124,7 +124,7 @@ static void compute_NX_GOY(const double *ax, const double *ay, double *res)
 /*   -> (X, Y) = state at t+dt                                                */
 /* ────────────────────────────────────────────────────────────────────────── */
 static void ab2_step(
-        const double *Xp,  const double *Yp,
+        const double *Xp_in,  const double *Yp_in,
         const double *NXp, const double *NYp,
         const double *Xpp_in, const double *Ypp_in,   /* only for A[i]*A[i] */
         const double *NXpp, const double *NYpp,
@@ -135,12 +135,12 @@ static void ab2_step(
     double dt = p.dt;
 
     for (i = 0; i < p.N; i++) {
-        X_out[i] = A[i]*Xp[i]
+        X_out[i] = A[i]*Xp_in[i]
                  + 1.5*dt*A[i]*NXp[i]
                  - 0.5*dt*A[i]*A[i]*NXpp[i]
                  + dt*f1*D[i];
 
-        Y_out[i] = A[i]*Yp[i]
+        Y_out[i] = A[i]*Yp_in[i]
                  + 1.5*dt*A[i]*NYp[i]
                  - 0.5*dt*A[i]*A[i]*NYpp[i]
                  + dt*f2*D[i];
@@ -155,7 +155,9 @@ static void ab2_step(
  * goy_integrate
  *
  * @param Xpp_in, Ypp_in   State at  t - dt          (length N, read-only)
+ * @param Ypp_in
  * @param Xp_in,  Yp_in    State at  t               (length N, read-only)
+ * @param Yp_in
  * @param n_steps           Number of time steps to perform
  * @param out_Xp, out_Yp   Output: state at t + (n_steps-1)*dt
  * @param out_X,  out_Y    Output: state at t +  n_steps   *dt

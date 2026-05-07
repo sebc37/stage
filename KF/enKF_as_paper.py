@@ -52,7 +52,7 @@ def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_enKF_100dt.dat"
+path_data = PATH + "data_test_precis.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF/"
 
 data =  np.loadtxt(path_data,dtype=np.float64) # charge le jeu de données
@@ -157,7 +157,7 @@ a = y_obs_.copy()
 ######### paramètres du modèle pour l'intégration #############################
 TIME      = 1000.
 DT        = 1e-5
-FS        = 999.
+FS        = 100.
 FORCE     = 0.005
 N_FORCE   = 4
 FORCE_RND = 0
@@ -219,35 +219,36 @@ def m_step(Xpp, Ypp, Xp, Yp):
 j_ = 0 #np.random.randint(3,Npts-1001)
 nb_iter = 3000
 count_init   = int(TIME / DT)  
+
 n_steps_first = count_init % N_fs  
-# series = np.zeros((n,nb_iter)).T
-# series[0,:] = Data_shell[j_,:]
-# series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
+series = np.zeros((n,nb_iter)).T
+series[0,:] = Data_shell[j_,:]
+series[1,:] = Data_shell[j_+1,:]#x_past[0,:]
 
 
 
-# for k in range(2,nb_iter):
-#     x_past = series[k-2:k,:].copy()
+for k in range(2,nb_iter):
+    x_past = series[k-2:k,:].copy()
     
-#     _,_,cur_Xp,cur_Yp =m_step(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2],Xp=x_past[1,0::2],Yp=x_past[1,1::2])#m_b(x_past,N_fs=999,n_steps_first=99,custom=True) #
-#     series[k, 0::2] = cur_Xp.copy()
-#     series[k, 1::2] = cur_Yp.copy()
-#     # print("serie:",series[k,0:2])
+    _,_,cur_Xp,cur_Yp =m_step(Xpp=x_past[0,0::2],Ypp=x_past[0,1::2],Xp=x_past[1,0::2],Yp=x_past[1,1::2])#m_b(x_past,N_fs=999,n_steps_first=99,custom=True) #
+    series[k, 0::2] = cur_Xp.copy()
+    series[k, 1::2] = cur_Yp.copy()
+    # print("serie:",series[k,0:2])
 
-# Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
+Rmse = np.sqrt(np.mean(Data_shell[j_:j_+nb_iter,:]-series)**2)
 
-# print(Rmse)
-# print(j_)
+print(Rmse)
+print(j_)
 
-# plt.figure()
+plt.figure()
 
-# for i in range(5):
-#      #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
-#      plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}",alpha=0.5)
-#      plt.plot(Data_shell[j_:j_+nb_iter,2*i],'--',label=f"shell_reel_{2*i}")
-#      plt.legend()
-#      plt.show()
-# plt.savefig("test")
+for i in range(5):
+     #plt.plot(np.abs(series[:,2*i]-Data_shell[:,2*i]))
+     plt.plot(series[:,2*i],label=f"shell_encaps_{2*i}",alpha=0.5)
+     plt.plot(Data_shell[j_:j_+nb_iter,2*i],'--',label=f"shell_reel_{2*i}")
+     plt.legend()
+     plt.show()
+plt.savefig("test")
 
 
 # plt.figure()
