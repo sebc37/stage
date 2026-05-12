@@ -349,7 +349,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 3000
+nb = 1000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -417,15 +417,18 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # Kalman gain
     
     K_g = P_f_enkf_tmp @ H.T @ np.linalg.inv(H @ P_f_enkf_tmp @ H.T + R) ### A CACHER
+    print("Kalman gain:",K_g.shape)
     
     # update step
     if(True):#sum(np.isfinite(y_obs[:,k]))>0): not np.isnan(y_obs[:,k].all())
         for i in range(Ne):
             for s in range(p): # faire le produit matricielle et remplacé les nan par des zero (2eme boucle sur K_g pour faire le produit matriciel ?)
+                
                 if np.isnan(y_obs[s,k]):
                 
 
                     y_obs[s,k] = y_f_enkf_tmp[s,i]
+                
                     #print( y_obs[s,k])
             x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER

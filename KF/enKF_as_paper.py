@@ -328,7 +328,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 30000
+nb = 1000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -470,6 +470,29 @@ for i in range(N):
 #     plt.ylabel(y_label[i-4], size=20)
 # plt.savefig(SAVE + "fig2enKF")
 ### compute Root Mean Squared Errors (RMSE) of the positions
+x_mean = []
+x_std = []
+cut=100
+for i in range(cut):
+    x_mean.append(np.mean(x_a_enkf[:,int(i*nb/cut):int((i+1)*nb/cut)],1))
+    x_std.append(np.var(x_a_enkf[:,int(i*nb/cut):int((i+1)*nb/cut)],1))
+print("mean:",x_mean)
+print("std:",x_std) 
+
+
+for j in range(0,n,2):
+    plt.figure()
+    _mean = [x_mean[i][j] for i in range(cut)]
+    _std = [x_std[i][j] for i in range(cut)]
+    plt.plot([k for k in range(int(cut))],_mean,'.', label=f'mean {int(j/2)}')
+    plt.errorbar([j for j in range(cut)], _mean, _std, linestyle='None', label=f'var {int(j/2)}',marker='^', color='blue')
+    
+    plt.xlabel('time')
+    plt.ylabel('mean and std of EnKF estimates')
+    plt.legend()
+    plt.savefig(SAVE + f"mean_enKF_over_time_{int(j/2)}.png",format='png')
+    plt.close()
+
 print('RMSE(obs):', np.sqrt(np.mean((y_obs[:,0:nb] - Data_shell.T[range(2*(k_min_collocation-1),2*k_max_collocation,1),0:nb])**2))) ### A CACHER
 
 print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1))) 
