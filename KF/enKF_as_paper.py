@@ -52,7 +52,7 @@ def filter_mode(X,mode_min:int,mode_max:int,t_min:int,ratio:float,seed):
 
 
 PATH = "/home/s26calme/Documents/code_stage/GOY-main/"
-path_data = PATH + "data_test_precis.dat"
+path_data = PATH + "data_enKF_base.dat"
 SAVE = "/home/s26calme/Documents/code_stage/KF/"
 
 data =  np.loadtxt(path_data,dtype=np.float64) # charge le jeu de données
@@ -108,7 +108,7 @@ MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2 ) for k in range(0,44,2)])
 ### parameters
 n     = 44 # state size  on veut estimer les Un de 1 à 22 avec Re et Im donc 44 variables d'état
 p     = 2*(k_max_collocation-k_min_collocation + 1) # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
-nb    = Npts # number of times
+nb    = 3000#Npts # number of times
 time  = np.array(range(nb)) # time vector
 var_Q = 0.0 # error variance of the model (in Kalman)
 var_R = 0.1 # error variance of the observations (in Kalman)
@@ -328,7 +328,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 1000
+nb = 3000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -485,7 +485,7 @@ for j in range(0,n,2):
     _mean = [x_mean[i][j] for i in range(cut)]
     _std = [x_std[i][j] for i in range(cut)]
     plt.plot([k for k in range(int(cut))],_mean,'.', label=f'mean {int(j/2)}')
-    plt.errorbar([j for j in range(cut)], _mean, _std, linestyle='None', label=f'var {int(j/2)}',marker='^', color='blue')
+    plt.errorbar([j for j in range(cut)], _mean, _std, linestyle='None', label=f'var {int(j/2)}', color='blue')
     
     plt.xlabel('time')
     plt.ylabel('mean and std of EnKF estimates')

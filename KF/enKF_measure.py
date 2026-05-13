@@ -138,7 +138,7 @@ for i in range(int(p/2)):
 
 ##############  noisy observations ##################
 y_obs = Data_shell.T.copy() # observations = données réelles  
-y_obs_ = y_obs[2*k_min_collocation:2*k_max_collocation,:]
+y_obs_ = y_obs[2*k_min_collocation:2*obs_end,:]
 a = y_obs_.copy()
 
 # for t in range(Npts):
@@ -287,12 +287,16 @@ def make_H(kmin,kmax,obs_start,obs_end):
     
     return H
 H = make_H(k_min_collocation,k_max_collocation,obs_start,obs_end)
-
+print("Observation matrix H:",H.shape)
+print(H)
+print(H[:,2*(k_min_collocation-1):2*obs_end].shape)
 i_nan = np.random.choice(Npts, size=int(0.99*Npts), replace=False) # indices des observations à supprimer
 
+# on selectionne que les modes que l'on veut observer + bruit gaussien
 y_obs = H[:,2*(k_min_collocation-1):2*obs_end] @ (Data_shell.T[2*(k_min_collocation-1):2*obs_end] + np.random.multivariate_normal(np.zeros(p),R,size=(Npts,)).T) # vrai observation 
 
 # revmove false zero
+print(y_obs[2*(k_max_collocation-k_min_collocation+1)])
 y_obs[2*(k_max_collocation-k_min_collocation+1):2*(obs_start-k_min_collocation+1)-2*(k_max_collocation-k_min_collocation-1),:] = y_obs[k_max_collocation:obs_start,:]*np.nan
 # mesure simultannée interscale 
 y_obs[2*(obs_start-k_min_collocation+1)-2*(k_max_collocation-k_min_collocation-1):2*(obs_end-k_min_collocation+1),i_nan] = y_obs[2*(obs_start-k_min_collocation+1)-2*(k_max_collocation-k_min_collocation-1):2*(obs_end-k_min_collocation+1),i_nan]*np.nan
@@ -349,7 +353,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 1000
+nb = 3000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -417,20 +421,21 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
     # Kalman gain
     
     K_g = P_f_enkf_tmp @ H.T @ np.linalg.inv(H @ P_f_enkf_tmp @ H.T + R) ### A CACHER
-    print("Kalman gain:",K_g.shape)
     
     # update step
     if(True):#sum(np.isfinite(y_obs[:,k]))>0): not np.isnan(y_obs[:,k].all())
         for i in range(Ne):
-            for s in range(p): # faire le produit matricielle et remplacé les nan par des zero (2eme boucle sur K_g pour faire le produit matriciel ?)
+            # for s in range(p): # faire le produit matricielle et remplacé les nan par des zero (2eme boucle sur K_g pour faire le produit matriciel ?)
                 
-                if np.isnan(y_obs[s,k]):
+            #     if np.isnan(y_obs[s,k]):
                 
 
-                    y_obs[s,k] = y_f_enkf_tmp[s,i]
+            #         y_obs[s,k] = y_f_enkf_tmp[s,i]
                 
-                    #print( y_obs[s,k])
-            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ (y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
+            #         #print( y_obs[s,k])
+            dif = y_obs[:,k] - y_f_enkf_tmp[:,i]
+            dif[np.isnan(dif)] = 0 # on remplace les nan par des zero pour faire le produit matriciel
+            x_a_enkf_tmp[:,i] = x_f_enkf_tmp[:,i] + K_g @ dif#(y_obs[:,k] - y_f_enkf_tmp[:,i]) ### A CACHER
         P_a_enkf_tmp = np.cov(x_a_enkf_tmp) ### A CACHER
         
         # inflation multiplicative
@@ -503,7 +508,7 @@ for i in range(N):
             plt.xlabel('$time$')
             plt.ylabel(f'$ \Re(U_{i+1})$')
             plt.legend()
-    plt.savefig(SAVE + f"fig1enKF_{i}.png",format='png',dpi=400)
+    plt.savefig(SAVE + f"fig1enKF_{i}.png",format='png')
     # plt.figure()
     # plt.plot(time[0:nb],g[i,0:nb],label=f'inflation factor g for variable $U_{i//2}$')
     # plt.xlabel('time')
@@ -530,8 +535,36 @@ for i in range(N):
 
 print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1))) 
 
+# plt.figure()
+# plt.plot([i for i in range(n)], np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1)), marker='o')
+# plt.xlabel('shell number')
+# plt.ylabel('RMSE')
+# plt.savefig(SAVE + "RMSE_enKF.png",format='png',dpi=400)
+
+
 plt.figure()
-plt.plot([i for i in range(n)], np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**2,1)), marker='o')
+plt.semilogy([i for i in range(int(n/2))], np.sqrt(np.mean((np.sqrt(x_a_enkf[0::2,0:nb]**2 + x_a_enkf[1::2,0:nb]**2) - np.sqrt(Data_shell.T[0::2,0:nb]**2 + Data_shell.T[1::2,0:nb]**2))**2,1))/np.mean(np.sqrt(Data_shell.T[0::2,0:nb]**2 + Data_shell.T[1::2,0:nb]**2)**2,1), marker='o')
 plt.xlabel('shell number')
 plt.ylabel('RMSE')
-plt.savefig(SAVE + "RMSE_enKF.png",format='png',dpi=400)
+plt.savefig(SAVE + "RMSE_enKF.png",format='png')
+plt.close()
+
+plt.figure()
+plt.semilogy([i for i in range(int(n/2))],np.mean(Data_shell.T[0::2,0:nb]**2 + Data_shell.T[1::2,0:nb]**2,1),label='Truth')
+plt.semilogy([i for i in range(int(n/2))],np.mean(x_a_enkf[0::2,0:nb]**2 + x_a_enkf[1::2,0:nb]**2,1),label='pred')
+plt.semilogy([i for i in range(int(n/2))],[k**(-2/3) for k in K],'--',alpha=0.5)
+plt.xlabel('shell number')
+plt.ylabel('$log(<|U_n|^2>_T)$')
+plt.legend()
+plt.savefig(SAVE + "log_variance_enKF.png",format='png')
+plt.close()
+
+
+plt.figure()
+plt.semilogy([i for i in range(int(n/2))],(np.mean((Data_shell.T[0::2,0:nb]**2 + Data_shell.T[1::2,0:nb]**2)**2 ,1))/np.mean((Data_shell.T[0::2,0:nb]**2 + Data_shell.T[1::2,0:nb]**2),1)**2,label='Truth')
+plt.semilogy([i for i in range(int(n/2))],(np.mean((x_a_enkf[0::2,0:nb]**2 + x_a_enkf[1::2,0:nb]**2)**2 ,1))/np.mean((x_a_enkf[0::2,0:nb]**2 + x_a_enkf[1::2,0:nb]**2),1)**2,label='pred')
+plt.xlabel('shell number')
+plt.ylabel('$log({<|U_n|^4>_T}/{(<|U_n|^2>_T)^2})$')
+plt.legend()
+plt.savefig(SAVE + "log_kurtosis_enKF.png",format='png')
+plt.close()
