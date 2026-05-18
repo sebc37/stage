@@ -111,7 +111,7 @@ MS = np.array([(0.05**2)*np.mean(shell_array[:,k]**2 ) for k in range(0,44,2)])
 ### parameters
 n     = 44 # state size  on veut estimer les Un de 1 à 22 avec Re et Im donc 44 variables d'état
 p     = 2*(obs_end-k_min_collocation + 1) # On observe Un n=5,6,7,8,9,10 avec Re et Im donc 12 variables d'observations 
-nb    = Npts # number of times
+nb    = 100 # number of times
 time  = np.array(range(nb)) # time vector
 var_Q = 0.0 # error variance of the model (in Kalman)
 var_R = 0.1 # error variance of the observations (in Kalman)
@@ -353,7 +353,7 @@ j_start = 2
 
 amp = np.std(Data_shell, axis=0)
 
-nb = 3000
+# nb = 3000
 # initialisation de l'ensemble 
 for i in range(Ne):
     #x_a_enkf_tmp[:,i] = np.random.multivariate_normal(x_0, P_0)
@@ -445,9 +445,12 @@ for k in tqdm.tqdm(range(nb)): # forward in time #nb
         for j in range(n):
                 g[j,k] = max(1,1+lmb_inf*(P_f_enkf_tmp[j,j]-P_a_tilde[j,j,k])/P_f_enkf_tmp[j,j]) # terme d'inflation multiplicative pour chaque variable d'état ### A CACHER
         
+        for i in range(Ne):
+            x_a_enkf_tmp[:,i] = g[:,k]*x_a_enkf_tmp[:,i] + (1-g[:,k])*mu_n
+
         x_f_enkf[:,k]   = np.mean(x_f_enkf_tmp,1)
         P_f_enkf[:,:,k] = P_f_enkf_tmp
-        x_a_enkf[:,k]   = g[:,k]*np.mean(x_a_enkf_tmp,1) + (1-g[:,k])*mu_n # g*  + (1-g)*mu_n
+        x_a_enkf[:,k]   = np.mean(x_a_enkf_tmp,1) # g*  + (1-g)*mu_n g[:,k]* + (1-g[:,k])*mu_n 
         P_a_enkf[:,:,k] = P_a_enkf_tmp
         # U_tilde = g*U_tilde + (1-g)*mu_n[:,None] 
 
