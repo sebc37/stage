@@ -543,6 +543,10 @@ print('RMSE(EnKF):', np.sqrt(np.mean((x_a_enkf[:,0:nb] - Data_shell.T[:,0:nb])**
 # plt.xlabel('shell number')
 # plt.ylabel('RMSE')
 # plt.savefig(SAVE + "RMSE_enKF.png",format='png',dpi=400)
+plt.figure()
+plt.plot(np.sqrt(P_a_tilde[2*10,2*10,0:nb]), label=f'EnKF 95% confidence interval for $U_{10//2}$')
+plt.savefig(SAVE + f"confidence_interval_enKF_{10}.png",format='png')
+plt.close()
 
 
 plt.figure()
